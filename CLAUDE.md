@@ -31,9 +31,9 @@ If the **Project** section below is still empty, this is the first session. Befo
 
 <!-- Fill this in during the first session, and keep it current. -->
 
-- **Vision:** (not yet discussed)
-- **Platform:** (not yet chosen)
-- **Current milestone:** (not yet set)
+- **Vision:** An active fact-checker for short-form video. While you watch a TikTok, it quietly finds checkable claims in what's being said, checks them against sources on request, and reports signs the video is AI-generated. It should stay out of the way: no UI when there's nothing to check, a small button beside the video otherwise, and the video pauses while you read. Judgments use TypeSafe. See `RESEARCH.md` for the feasibility work behind these choices.
+- **Platform:** Chrome extension (Manifest V3) for TikTok on desktop web first, with a small server-side endpoint holding the TypeSafe key. An Android app is a committed later goal, as a second client to the same endpoint. iOS is out (no Mac, and iOS doesn't allow it). Instagram is deferred.
+- **Current milestone:** Milestone 1, prove we can read the data. On a real TikTok video page, the extension prints the video's transcript and whether TikTok labels it as AI-generated. It works when the printed transcript matches what the person said and the AI label is reported correctly.
 
 ## Keeping PLAN.md
 
@@ -51,7 +51,7 @@ Keep entries short and dated. Do not invent progress or reasons the student did 
 
 <!-- Update this section after discussing with the student. It persists across sessions. -->
 
-- **Collaboration style:** (not yet chosen)
+- **Collaboration style:** Conversational. Claude does most of the coding; Dylan guides direction and reviews results.
 - **Standing corrections:** (none yet)
 
 ## Working Together
