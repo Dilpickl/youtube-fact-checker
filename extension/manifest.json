@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Video Fact Check",
+  "version": "0.1.0",
+  "description": "Finds checkable claims and signs of AI generation in TikTok videos as you watch.",
+  "minimum_chrome_version": "111",
+  "background": { "service_worker": "dist/background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.tiktok.com/*"],
+      "js": ["dist/page-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.tiktok.com/*"],
+      "js": ["dist/content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "host_permissions": [
+    "https://*.tiktok.com/*",
+    "https://*.tiktokcdn.com/*",
+    "https://*.tiktokcdn-us.com/*"
+  ]
+}

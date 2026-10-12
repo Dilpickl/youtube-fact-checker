@@ -29,7 +29,8 @@ Design rules, agreed 2026-10-12:
 
 1. **Milestone 1:** on a real TikTok page, print the transcript and whether
    TikTok labels the video as AI-generated. Done when the transcript matches
-   what was said and the label is reported correctly.
+   what was said and the label is reported correctly. *Built 2026-10-12 (tests
+   pass); waiting on Dylan's live test in Chrome.*
 2. Claim detection with TypeSafe behind a small server endpoint; show the button
    with a claim count.
 3. On-demand checking: Google Fact Check Tools API, then web evidence, then
@@ -78,10 +79,22 @@ topic before tuning anything. He asked for this reminder on 2026-10-12.
   into searchable form needs a language model. Dylan sees combining the two as
   part of what makes the project nuanced. Which model: pending (Claude
   recommended Claude Haiku 5.5; Dylan to decide after comparing).
+- **2026-10-12 — Read the data TikTok already downloads; never request
+  TikTok pages.** The extension reads copies of TikTok's own feed responses
+  and the data embedded in video pages. While researching, TikTok showed a
+  CAPTCHA after quick page-to-page navigation, so making extra requests would
+  risk bot checks for users. Only the caption file for the video being watched
+  is fetched. Risk to watch: TikTok could notice the extension reading its
+  network responses.
+- **2026-10-12 — Stack: TypeScript, esbuild, Node's built-in test runner,
+  Prettier.** No extension framework until one is needed.
 - **2026-10-12 — Cost protection.** Prepaid credits with auto-reload off,
   a daily cap in the server, a per-install rate limit, a verdict cache keyed by
   claim text, and checking only on click. No user accounts.
 
 ## Problems
 
-(none yet)
+- **2026-10-12 — Couldn't confirm caption field names.** Both videos inspected
+  live were music-only, and then TikTok showed a CAPTCHA, which Claude does not
+  solve. Caption parsing uses field names from earlier TikTok pages and accepts
+  both known spellings; Dylan's first live test confirms them.
