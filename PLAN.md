@@ -36,7 +36,12 @@ Design rules, agreed 2026-10-12:
    per-source supports/contradicts judgments.
 4. AI-signal section: TikTok label, caption and hashtags, comments.
 5. Audio fallback for videos without captions.
-6. Android app as a second client to the same endpoint.
+6. Stretch, after TikTok works well: Android app as a second client to the
+   same endpoint; other platforms.
+
+**Reminder for Claude:** once milestone 3 works end to end, remind Dylan to
+build the test set (20-30 TikToks with known answers) and measure accuracy per
+topic before tuning anything. He asked for this reminder on 2026-10-12.
 
 ## Decisions
 
@@ -65,6 +70,17 @@ Design rules, agreed 2026-10-12:
   detectors don't publish false-positive rates and do badly on real footage
   with fast cuts. Use TikTok's label, caption and hashtags, and comments
   instead. See `RESEARCH.md`.
+
+- **2026-10-12 — TikTok is the goal; expand afterwards.** Android moved from
+  committed goal to stretch, given 24 hours and six milestones.
+- **2026-10-12 — Add a small language model alongside TypeSafe.** TypeSafe
+  judges and selects but doesn't write text; rewriting messy caption claims
+  into searchable form needs a language model. Dylan sees combining the two as
+  part of what makes the project nuanced. Which model: pending (Claude
+  recommended Claude Haiku 5.5; Dylan to decide after comparing).
+- **2026-10-12 — Cost protection.** Prepaid credits with auto-reload off,
+  a daily cap in the server, a per-install rate limit, a verdict cache keyed by
+  claim text, and checking only on click. No user accounts.
 
 ## Problems
 
