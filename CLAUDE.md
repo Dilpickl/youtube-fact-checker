@@ -51,7 +51,9 @@ Keep entries short and dated. Do not invent progress or reasons the student did 
 <!-- Update this section after discussing with the student. It persists across sessions. -->
 
 - **Collaboration style:** Conversational. Claude does most of the coding; Dylan guides direction and reviews results.
-- **Standing corrections:** (none yet)
+- **Standing corrections:**
+  - Dylan will keep asking questions about the work and where to go next; answer them, they are part of how Dylan steers. (2026-10-13)
+  - Dylan says what done looks like before asking for a change. If they haven't yet, ask for it before building. (2026-10-13)
 
 ## Working Together
 
