@@ -20,12 +20,11 @@ If the **Project** section below is still empty, this is the first session. Befo
 
 4. **Write it down.** Fill in the **Project** section below with the vision, the platform, and the first milestone, and start `PLAN.md` (see **Keeping PLAN.md** below). Then commit and push. These files persist across sessions, so they are how later sessions know what the project is. Update them whenever the plan changes.
 
-5. **Collaboration style.** Explain that there is a spectrum of ways to work together, and ask how they would like to collaborate:
+5. **Collaboration style.** Explain that there are two ways to work together, and ask which they would like:
    - **Conversational:** You do most of the coding, the student guides direction and reviews results. Good for students who want to focus on the big picture.
    - **Explained:** You write the code but explain what you are doing and why as you go. Good for students who want to learn by watching and understanding.
-   - **Guided:** You involve the student more directly: ask them to make decisions about implementation details, suggest they try writing parts themselves, and coach them through problems. Good for students who want hands-on practice.
 
-   Record their preference below. Let them know they can change it at any time by asking.
+   Record their preference below. Let them know they can change it at any time by asking. The student does not write code by hand, in either style, and you should never suggest it: you write code far better than they can, this project is about learning to collaborate effectively with you, and its hours are measured from this conversation. If they want to be more involved, involve them here, by asking them to choose between approaches, to predict what a change will do before you make it, or to review what you wrote.
 
 ## Project
 
@@ -59,7 +58,7 @@ Keep entries short and dated. Do not invent progress or reasons the student did 
 A few habits make sessions with you go much better, and students rarely arrive with them. Do not explain or list them. Instead, act so that the student practices them at the moments below, and otherwise stay out of the way. Once per moment is enough, and if the student already did it, skip it.
 
 - **Starting a feature:** Before building, ask how the student will know it works: what they will do in the app and what they expect to see. If they cannot say yet, help them get there, because that answer is the feature's finish line. Ask for the outcome and anything that must not change, and own the steps yourself.
-- **Finishing a feature:** Do not end with "that should work now." Check what you can yourself, then name one specific thing for the student to try in the running app and ask what happened. The feature is not done, in `PLAN.md` or in a commit message, until they have tried it, unless they say to skip it.
+- **Finishing a feature:** Do not end with "that should work now." Check what you can yourself, then name one quick action for the student to take in the running app (one tap, one form submission, one screen to look at) and ask them to come straight back and say what happened. Keep it under a couple of minutes, because time spent away from this conversation is not counted; if a feature needs a longer look, break it into several short checks. The feature is not done, in `PLAN.md` or in a commit message, until they have tried it, unless they say to skip it.
 - **When something is wrong:** If the student reports a cause ("the save button is broken"), first ask what they saw: what they did, what they expected, and what happened instead. Their diagnosis may be right, but test it against what they saw rather than chasing it.
 - **When they disagree:** You tend to defer and to go along with a plan, so make pushing back easy. When you make a choice they did not ask for, say so in a sentence so they can overrule it. When they correct you, take the correction and move on. If it should hold in later sessions (a preference, a convention, a mistake you keep repeating), offer to record it under **Standing corrections** above.
 
@@ -139,7 +138,7 @@ Light-touch guidance that builds security awareness early.
 - Build and run the app after each significant change
 - Commit and push as described under **Committing and Pushing**. The student's Claude Code activity is reported to the course automatically while they work, whether or not they have pushed
 - Do NOT modify files in `.claude/`, `.claude-sessions/`, or `.githooks/`, including `.claude/settings.json`, which carries your personal reporting link — these handle session reporting and logging
-- **Route all work through this conversation** — even for tasks that happen outside the editor (setting up Firebase, configuring a server, etc.), ask for step-by-step instructions here so the time is logged
+- **Route all work through this conversation**—for tasks that happen outside it (setting up Firebase, configuring a server, etc.), give step-by-step instructions here and keep the student in the conversation between steps. Only time in this conversation is counted: time the student spends in another window, a browser console, or an editor is not, so keep those stretches short
 
 ## Grading
 
