@@ -50,3 +50,22 @@ npm run format     # format with Prettier
 
 All code that depends on how TikTok's site is built lives in `src/tiktok.ts`.
 When TikTok changes its site, start there.
+
+## Promo trailer
+
+`promo/` holds a 36-second trailer made with [Remotion](https://www.remotion.dev/)
+(videos written as React code). It shows the planned design and is labeled
+"Concept preview" until those features exist. It has its own dependencies:
+
+```bash
+cd promo
+npm install
+npm run studio   # live preview with sound in the browser
+npm run render   # writes out/trailer.mp4 (1080p, with soundtrack)
+npm run poster   # writes out/poster.png
+```
+
+The script and timing live in `promo/src/timeline.ts`; the soundtrack is
+synthesized by `promo/scripts/soundtrack.ts` from the same timeline, so sound
+effects stay in sync when timing changes. Rendering needs Google Chrome
+installed (see `promo/remotion.config.ts`).

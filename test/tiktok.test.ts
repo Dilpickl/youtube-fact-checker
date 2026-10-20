@@ -154,6 +154,41 @@ test("reports TikTok's AI label", () => {
   assert.equal(extractVideos(flagOnly)[0].aiLabel.labeled, true);
 });
 
+// Regression: the first videos on the For You page were never reported because
+// TikTok embeds them under "webapp.updated-items", seen on 2026-10-13.
+test("reads the videos embedded in the For You page", () => {
+  const forYouPage = {
+    __DEFAULT_SCOPE__: {
+      "webapp.updated-items": [
+        { id: "7681077416399326495", video: {} },
+        { id: "7675538187468541216", video: {} },
+      ],
+    },
+  };
+  assert.deepEqual(
+    extractVideos(forYouPage).map((video) => video.id),
+    ["7681077416399326495", "7675538187468541216"],
+  );
+});
+
+// Regression: a creator-labeled video printed "no" because only IsAigc and
+// AIGCDescription were checked. Field values copied from the live video.
+test("reports the creator's AI label when only aigcLabelType is set", () => {
+  const creatorLabeled = {
+    itemList: [
+      {
+        id: "7693460283968245013",
+        IsAigc: false,
+        AIGCDescription: "",
+        ShowAIGC: true,
+        aigcLabelType: "1",
+        video: {},
+      },
+    ],
+  };
+  assert.equal(extractVideos(creatorLabeled)[0].aiLabel.labeled, true);
+});
+
 test("returns nothing for responses that aren't video data", () => {
   for (const json of [null, "text", 42, [], {}, { itemList: "nope" }]) {
     assert.deepEqual(extractVideos(json), []);

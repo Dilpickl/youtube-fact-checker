@@ -58,7 +58,7 @@ document.addEventListener(
   (event) => {
     if (!(event.target instanceof HTMLVideoElement)) return;
     const id = videoIdFrom(ancestorIds(event.target), location.pathname);
-    if (!id || reported.has(id)) return;
+    if (!id || reported.has(id) || waitingForId === id) return;
     if (videosById.has(id)) {
       void report(id);
       return;

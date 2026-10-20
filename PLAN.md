@@ -44,6 +44,11 @@ Design rules, agreed 2026-10-12:
 build the test set (20-30 TikToks with known answers) and measure accuracy per
 topic before tuning anything. He asked for this reminder on 2026-10-12.
 
+## Done (unverified until Dylan reviews)
+
+- 2026-10-12: Promo trailer (`promo/`), 36 s at 1080p with a synthesized
+  soundtrack. Shows the planned design, labeled "Concept preview."
+
 ## Decisions
 
 - **2026-10-12 — Idea: fact-checker for short-form video.** Dylan's own idea,
@@ -88,6 +93,12 @@ topic before tuning anything. He asked for this reminder on 2026-10-12.
   network responses.
 - **2026-10-12 — Stack: TypeScript, esbuild, Node's built-in test runner,
   Prettier.** No extension framework until one is needed.
+- **2026-10-12 — Promo trailer made with Remotion, labeled as a concept.**
+  Dylan asked for a store-page trailer. It shows the planned UI, not the
+  current console-only build, so the end card says "Concept preview · in
+  development"; re-render without that label once the UI exists. No TikTok
+  logo or real footage: a generic player with drawn stand-in videos. The
+  soundtrack is synthesized in code, so there's no music licensing.
 - **2026-10-12 — Cost protection.** Prepaid credits with auto-reload off,
   a daily cap in the server, a per-install rate limit, a verdict cache keyed by
   claim text, and checking only on click. No user accounts.
@@ -98,3 +109,10 @@ topic before tuning anything. He asked for this reminder on 2026-10-12.
   live were music-only, and then TikTok showed a CAPTCHA, which Claude does not
   solve. Caption parsing uses field names from earlier TikTok pages and accepts
   both known spellings; Dylan's first live test confirms them.
+- **2026-10-12 — Trailer render failed on this laptop.** Windows blocks some
+  unsigned programs (Smart App Control): Remotion's downloaded headless Chrome
+  and its `ffprobe.exe` were refused, while `ffmpeg.exe` was allowed. Fixes:
+  `promo/remotion.config.ts` renders with the installed (signed) Chrome, and
+  the soundtrack is added with ffmpeg after rendering so ffprobe is never
+  needed. Also, TypeScript 7 lacks the API Remotion uses to read tsconfig
+  (JSX broke), so `promo/` pins TypeScript 5.

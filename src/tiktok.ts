@@ -43,10 +43,13 @@ export function extractVideos(json: unknown): TikTokVideo[] {
   const root = asObject(json);
   if (!root) return [];
   const pageScope = asObject(root.__DEFAULT_SCOPE__);
+  // A single video's page embeds it under "webapp.video-detail"; the For You
+  // page embeds its first few videos as a list under "webapp.updated-items".
   const candidates = pageScope
     ? [
         asObject(asObject(pageScope["webapp.video-detail"])?.itemInfo)
           ?.itemStruct,
+        ...asArray(pageScope["webapp.updated-items"]),
       ]
     : [...asArray(root.itemList), asObject(root.itemInfo)?.itemStruct];
   return candidates.flatMap((candidate) => {
@@ -71,6 +74,10 @@ function toVideo(value: unknown): TikTokVideo | null {
   });
   const reason = captionInfo?.noCaptionReason;
   const aiDescription = asString(item.AIGCDescription);
+  // On 2026-10-13 a "Creator labeled as AI-generated" video had aigcLabelType
+  // "1" while IsAigc was false and AIGCDescription empty; unlabeled videos had
+  // no aigcLabelType. ShowAIGC is true on every video, so it says nothing.
+  const aiLabelType = String(item.aigcLabelType ?? "0");
 
   return {
     id,
@@ -90,7 +97,8 @@ function toVideo(value: unknown): TikTokVideo | null {
     ),
     noCaptionReason: typeof reason === "number" ? reason : null,
     aiLabel: {
-      labeled: item.IsAigc === true || aiDescription !== "",
+      labeled:
+        item.IsAigc === true || aiDescription !== "" || aiLabelType !== "0",
       description: aiDescription,
     },
   };
