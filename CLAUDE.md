@@ -30,7 +30,7 @@ If the **Project** section below is still empty, this is the first session. Befo
 
 - **Vision:** A schoolwork assistant that tells Dylan what to do right now. Assignments come in from screenshots of any course site (a vision language model reads them, TypeSafe checks each row) and later Canvas's calendar feed. "What now?" picks one task with a reason and a start-by time from the deadline, the task's size, and Dylan's energy. A focus timer records real time spent, so estimates improve over time. A Discord bot adds tasks by message or photo from the phone and sends morning and evening debriefs. Judgments use TypeSafe. The earlier TikTok fact-checker is shelved (commit `f1b634d`, `RESEARCH.md`).
 - **Platform:** Website plus a server that also runs a Discord bot. The website covers import review, the week view, progress, and setup; Discord covers quick use from the phone. A classmate tries it from the website link or by joining the Discord server. Stack and hosting not chosen yet.
-- **Current milestone:** Milestone 1, screenshot import (server side). Done when Dylan drops in the McGraw Hill Connect Capitolo 5 screenshot and gets all seven assignments with the right due dates, with Strutture III (Oct 20) and Cultura (Oct 21) marked still open.
+- **Current milestone:** Milestone 2, the website: review and fix an import, save assignments, and add more screenshots (merging duplicates, applying updates). Milestone 1, screenshot import from the command line, is done (2026-10-20). Finish line for milestone 2: to be agreed with Dylan.
 
 ## Keeping PLAN.md
 

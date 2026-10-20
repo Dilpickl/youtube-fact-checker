@@ -30,26 +30,26 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
 
 ## Done
 
-(nothing yet for this app)
+- 2026-10-20: Milestone 1, screenshot import (command line). `npm run import`
+  reads the Connect Capitolo 5 screenshot: all seven assignments with correct
+  names, course, and due dates; Strutture III and Cultura open, the rest
+  closed; nothing flagged. Dylan checked it against Connect.
 
 ## Next
 
-1. **Milestone 1, screenshot import (server side).** Done when Dylan drops in
-   the Connect Capitolo 5 screenshot and gets all seven assignments with the
-   right due dates, with Strutture III (Oct 20) and Cultura (Oct 21) marked
-   still open.
-2. Website: review and fix an import, save assignments, add more screenshots
+1. **Milestone 2, website:** review and fix an import, save assignments, add
+   more screenshots
    (merge duplicates, apply updates).
-3. "What now?": energy level, one task, reason, start-by time, "Not now".
-4. Focus timer: start, done, next up; records time actually spent.
-5. Learning: compare timer data with estimates, adjust per course; learn which
+2. "What now?": energy level, one task, reason, start-by time, "Not now".
+3. Focus timer: start, done, next up; records time actually spent.
+4. Learning: compare timer data with estimates, adjust per course; learn which
    hours Dylan focuses best.
-6. Discord bot: add tasks by message or photo, "what now?", morning debrief
+5. Discord bot: add tasks by message or photo, "what now?", morning debrief
    (due today, keeping up, first class, weather).
-7. Evening "prep for tomorrow" debrief.
-8. Canvas calendar feed import.
-9. Exams: split into study sessions spread over the days before.
-10. Travel time to first class (needs a maps API).
+6. Evening "prep for tomorrow" debrief.
+7. Canvas calendar feed import.
+8. Exams: split into study sessions spread over the days before.
+9. Travel time to first class (needs a maps API).
 
 **Reminder for Claude:** once import works, build a test set of real
 screenshots across platforms and measure extraction accuracy before tuning;
@@ -91,9 +91,24 @@ numbers are the resume evidence Dylan wants.
 - **2026-10-20 — Ambitious scope on purpose.** Dylan wants everything from the
   website to the bot and isn't worried about the 24-hour budget. Build in the
   order under Next so each step is usable on its own.
+- **2026-10-20 — How the two models' answers combine.** If Claude can't tell
+  whether a task is open and TypeSafe is confident, use TypeSafe; if TypeSafe
+  is unsure (near 50%), go with Claude. Flag a row only for a doubtful due
+  date, a confident contradiction, or a status neither can tell. The first
+  rule flagged every row on Connect because it treated "unsure" as "disagrees."
+- **2026-10-20 — "Closed" covers both past due and submitted.** Dylan: on
+  Connect a lock means either, and either way the task is finished for Dylan,
+  so the app doesn't separate them.
+- **2026-10-20 — Stack: TypeScript on Node 24** (runs TypeScript directly),
+  Anthropic and TypeSafe SDKs, zod for the extraction schema, sharp to resize
+  images, Node's test runner, Prettier.
 - Still to decide: stack, hosting (the bot needs an always-on server), and
   where data is stored (browser only, or an account so it reaches the phone).
 
 ## Problems
 
-(none yet for this app)
+- **2026-10-20 — TypeSafe rejected the screenshot ("Invalid image
+  dimensions").** TypeSafe accepts 280 to 1568 pixels per side and never
+  resizes; the Connect screenshot was 1576 wide, and phone screenshots are
+  larger. Fixed by shrinking every image to fit 1568 × 1568 before sending
+  (`MAX_IMAGE_SIDE`); Claude shrinks to about that size anyway.

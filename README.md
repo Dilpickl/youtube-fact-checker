@@ -1,71 +1,40 @@
-# Video Fact Check
+# Schoolwork assistant
 
-A Chrome extension that watches TikTok alongside you: it finds checkable claims
-in what a video says, checks them against sources when you ask, and reports
-signs a video is AI-generated. See `PLAN.md` for where the project stands and
-`RESEARCH.md` for why it is built this way.
+Tells you what to do right now. Assignments come in from screenshots of any
+course site, and the app picks one task, says why, and when to start it. See
+`PLAN.md` for the full plan.
 
-Current state (milestone 1): when a TikTok video starts playing, the extension
-prints its transcript and TikTok's AI label to the browser console.
+## Setup
 
-## Requirements
-
-- [Node.js](https://nodejs.org/) 24 or newer (the tests run TypeScript directly)
-- Google Chrome
-
-## Build
+Needs [Node.js](https://nodejs.org/) 24 or newer (it runs TypeScript directly).
 
 ```bash
 npm install
-npm run build
 ```
 
-The built scripts land in `extension/dist/`. Use `npm run watch` to rebuild on
-every save.
+Create a `.env` file in the project folder (Git ignores it) with your keys:
 
-## Load it in Chrome
+```
+TYPESAFE_API_KEY=...
+ANTHROPIC_API_KEY=...
+```
 
-1. Open `chrome://extensions`.
-2. Turn on **Developer mode** (top right).
-3. Click **Load unpacked** and choose this project's `extension` folder.
-4. After rebuilding, click the reload arrow on the extension's card, then
-   reload the TikTok tab.
+## Import a screenshot
 
-## Try it
+```bash
+npm run import -- test/fixtures/connect-capitolo5.png
+```
 
-1. Open [tiktok.com](https://www.tiktok.com) and play a video.
-2. Open DevTools (F12) and go to the **Console** tab.
-3. Type `[Fact check]` into the console's filter box.
-
-Each video you watch prints once, with its AI label, caption, on-screen text,
-and transcript.
+Prints each assignment found, with its due date and whether it's still open.
+Rows marked `CHECK THIS` are ones the two models didn't agree on.
 
 ## Develop
 
 ```bash
-npm test           # unit tests
+npm test           # unit tests (no API calls)
 npm run typecheck  # TypeScript checks
 npm run format     # format with Prettier
 ```
 
-All code that depends on how TikTok's site is built lives in `src/tiktok.ts`.
-When TikTok changes its site, start there.
-
-## Promo trailer
-
-`promo/` holds a 36-second trailer made with [Remotion](https://www.remotion.dev/)
-(videos written as React code). It shows the planned design and is labeled
-"Concept preview" until those features exist. It has its own dependencies:
-
-```bash
-cd promo
-npm install
-npm run studio   # live preview with sound in the browser
-npm run render   # writes out/trailer.mp4 (1080p, with soundtrack)
-npm run poster   # writes out/poster.png
-```
-
-The script and timing live in `promo/src/timeline.ts`; the soundtrack is
-synthesized by `promo/scripts/soundtrack.ts` from the same timeline, so sound
-effects stay in sync when timing changes. Rendering needs Google Chrome
-installed (see `promo/remotion.config.ts`).
+The earlier TikTok fact-checker extension is in Git history at commit
+`f1b634d`.
