@@ -28,11 +28,9 @@ If the **Project** section below is still empty, this is the first session. Befo
 
 ## Project
 
-<!-- Fill this in during the first session, and keep it current. -->
-
-- **Vision:** An active fact-checker for short-form video. While you watch a TikTok, it quietly finds checkable claims in what's being said, checks them against sources on request, and reports signs the video is AI-generated. It should stay out of the way: no UI when there's nothing to check, a small button beside the video otherwise, and the video pauses while you read. Judgments use TypeSafe. See `RESEARCH.md` for the feasibility work behind these choices.
-- **Platform:** Chrome extension (Manifest V3) for TikTok on desktop web first, with a small server-side endpoint holding the TypeSafe key. An Android app is a committed later goal, as a second client to the same endpoint. iOS is out (no Mac, and iOS doesn't allow it). Instagram is deferred.
-- **Current milestone:** Milestone 1, prove we can read the data. On a real TikTok video page, the extension prints the video's transcript and whether TikTok labels it as AI-generated. It works when the printed transcript matches what the person said and the AI label is reported correctly.
+- **Vision:** A schoolwork assistant that tells Dylan what to do right now. Assignments come in from screenshots of any course site (a vision language model reads them, TypeSafe checks each row) and later Canvas's calendar feed. "What now?" picks one task with a reason and a start-by time from the deadline, the task's size, and Dylan's energy. A focus timer records real time spent, so estimates improve over time. A Discord bot adds tasks by message or photo from the phone and sends morning and evening debriefs. Judgments use TypeSafe. The earlier TikTok fact-checker is shelved (commit `f1b634d`, `RESEARCH.md`).
+- **Platform:** Website plus a server that also runs a Discord bot. The website covers import review, the week view, progress, and setup; Discord covers quick use from the phone. A classmate tries it from the website link or by joining the Discord server. Stack and hosting not chosen yet.
+- **Current milestone:** Milestone 1, screenshot import (server side). Done when Dylan drops in the McGraw Hill Connect Capitolo 5 screenshot and gets all seven assignments with the right due dates, with Strutture III (Oct 20) and Cultura (Oct 21) marked still open.
 
 ## Keeping PLAN.md
 

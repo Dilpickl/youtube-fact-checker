@@ -2,117 +2,98 @@
 
 ## The app
 
-An active fact-checker for TikTok. While you watch, a Chrome extension reads the
-video's transcript, finds the checkable factual claims, and (when you ask)
-checks each one against sources: supported, contradicted, misleading, or
-unverified. It also reports signs a video is AI-generated. It's for anyone who
-watches short-form video, which is a broad audience. Dylan wanted a project with
-real-world impact and room for nuance, and wanted to find a good use for
-TypeSafe.
+A schoolwork assistant that tells Dylan what to do right now. Assignments come
+in from screenshots of any course site (Connect, PrairieLearn, Gradescope, a
+syllabus) and later from Canvas's calendar feed. "What now?" picks one task,
+says why, and gives a start-by time based on the deadline, how long the task
+takes, and Dylan's energy. A focus timer runs the task, and the timer data
+teaches the app how long Dylan's work really takes, so its estimates improve
+every week. A Discord bot brings it to Dylan's phone: add tasks by message or
+photo, ask "what now?", and get a morning debrief (due today, how Dylan is keeping
+up, first class, weather) and an evening "prep for tomorrow" debrief. A website
+handles what chat does badly: reviewing imports, seeing the whole week and
+progress, and setup.
 
-Design rules, agreed 2026-10-12:
-- Out of the way: no UI when nothing is checkable; otherwise a small button
-  just outside the video's corner, anchored to the `<video>` element rather than
-  TikTok's layout.
-- The popover opens beside the video, never over it, and the video pauses while
-  it's open.
-- Each claim is judged on its own. No single score for the whole video.
-- "Unverified" and "no signs of AI" are honest answers, not "false" or "real."
-- AI detection reports which signals fired (TikTok's label, caption and hashtags,
-  comments), never a bare "this is AI."
+It's for Dylan first. Dylan stresses about assignments more than anything else:
+what to do right now, when to start so a deadline isn't missed (including the
+weekly CS 124 hours), staying focused, and being sleepy while working. A
+classmate can try it from the website link or by joining the Discord server.
+
+Design rules, agreed 2026-10-19 and 2026-10-20:
+- One task at a time. "What now?" never shows the full menu; "Not now" skips.
+- Imports are checked before saving: rows TypeSafe doubts get a "Check this"
+  flag, and Dylan confirms.
+- Duplicates across screenshots merge; a newer screenshot updates an
+  assignment instead of adding a copy.
+- Deadline math, sorting, and stored facts stay in code; AI makes the
+  judgment calls (task size, fit for energy, same assignment or not).
 
 ## Done
 
-(nothing yet)
+(nothing yet for this app)
 
 ## Next
 
-1. **Milestone 1:** on a real TikTok page, print the transcript and whether
-   TikTok labels the video as AI-generated. Done when the transcript matches
-   what was said and the label is reported correctly. *Built 2026-10-12 (tests
-   pass); waiting on Dylan's live test in Chrome.*
-2. Claim detection with TypeSafe behind a small server endpoint; show the button
-   with a claim count.
-3. On-demand checking: Google Fact Check Tools API, then web evidence, then
-   per-source supports/contradicts judgments.
-4. AI-signal section: TikTok label, caption and hashtags, comments.
-5. Audio fallback for videos without captions.
-6. Stretch, after TikTok works well: Android app as a second client to the
-   same endpoint; other platforms.
+1. **Milestone 1, screenshot import (server side).** Done when Dylan drops in
+   the Connect Capitolo 5 screenshot and gets all seven assignments with the
+   right due dates, with Strutture III (Oct 20) and Cultura (Oct 21) marked
+   still open.
+2. Website: review and fix an import, save assignments, add more screenshots
+   (merge duplicates, apply updates).
+3. "What now?": energy level, one task, reason, start-by time, "Not now".
+4. Focus timer: start, done, next up; records time actually spent.
+5. Learning: compare timer data with estimates, adjust per course; learn which
+   hours Dylan focuses best.
+6. Discord bot: add tasks by message or photo, "what now?", morning debrief
+   (due today, keeping up, first class, weather).
+7. Evening "prep for tomorrow" debrief.
+8. Canvas calendar feed import.
+9. Exams: split into study sessions spread over the days before.
+10. Travel time to first class (needs a maps API).
 
-**Reminder for Claude:** once milestone 3 works end to end, remind Dylan to
-build the test set (20-30 TikToks with known answers) and measure accuracy per
-topic before tuning anything. He asked for this reminder on 2026-10-12.
-
-## Done (unverified until Dylan reviews)
-
-- 2026-10-12: Promo trailer (`promo/`), 36 s at 1080p with a synthesized
-  soundtrack. Shows the planned design, labeled "Concept preview."
+**Reminder for Claude:** once import works, build a test set of real
+screenshots across platforms and measure extraction accuracy before tuning;
+once learning works, measure how far off estimates are week by week. These
+numbers are the resume evidence Dylan wants.
 
 ## Decisions
 
-- **2026-10-12 — Idea: fact-checker for short-form video.** Dylan's own idea,
-  chosen over suggestions (scam shield, section-swap market, others) that didn't
-  interest him. Plain written-claim fact-checking already exists (Google's
-  tool), so the value is in checking video as you watch it.
-- **2026-10-12 — Chrome extension, not a paste-a-link web app.** Dylan found
-  pasting links "too useless"; the point is to be active while watching.
-- **2026-10-12 — TikTok first, Instagram deferred.** TikTok's page includes
-  caption tracks (including auto-generated ones). Instagram has no public
-  transcript, and the only route goes against its terms of service.
-- **2026-10-12 — Check anything checkable**, not one topic.
-- **2026-10-12 — TypeSafe for judgments.** Fast, parallel typed judgments per
-  sentence fit the "is this a checkable claim?" filter.
-- **2026-10-12 — Mobile: Android later, iOS out.** iOS doesn't let apps read
-  other apps' screens. Android can (screen capture plus on-device OCR, or a
-  share-sheet target). The extension comes first because debugging the
-  judging is easier there; Android reuses the same server endpoint.
-- **2026-10-12 — Smaller UI.** Dylan felt the first mockup took too much space
-  and would hurt the viewing experience. Iterated: corner dot, then a button
-  in TikTok's side buttons, then (because TikTok's layout could change and
-  break it) a button anchored to the video element itself. Pausing while
-  reading was Dylan's pick from the suggestions.
-- **2026-10-12 — AI detection as signals, not a detector.** Frame-analysis
-  detectors don't publish false-positive rates and do badly on real footage
-  with fast cuts. Use TikTok's label, caption and hashtags, and comments
-  instead. See `RESEARCH.md`.
-
-- **2026-10-12 — TikTok is the goal; expand afterwards.** Android moved from
-  committed goal to stretch, given 24 hours and six milestones.
-- **2026-10-12 — Add a small language model alongside TypeSafe.** TypeSafe
-  judges and selects but doesn't write text; rewriting messy caption claims
-  into searchable form needs a language model. Dylan sees combining the two as
-  part of what makes the project nuanced. Which model: pending (Claude
-  recommended Claude Haiku 5.5; Dylan to decide after comparing).
-- **2026-10-12 — Read the data TikTok already downloads; never request
-  TikTok pages.** The extension reads copies of TikTok's own feed responses
-  and the data embedded in video pages. While researching, TikTok showed a
-  CAPTCHA after quick page-to-page navigation, so making extra requests would
-  risk bot checks for users. Only the caption file for the video being watched
-  is fetched. Risk to watch: TikTok could notice the extension reading its
-  network responses.
-- **2026-10-12 — Stack: TypeScript, esbuild, Node's built-in test runner,
-  Prettier.** No extension framework until one is needed.
-- **2026-10-12 — Promo trailer made with Remotion, labeled as a concept.**
-  Dylan asked for a store-page trailer. It shows the planned UI, not the
-  current console-only build, so the end card says "Concept preview · in
-  development"; re-render without that label once the UI exists. No TikTok
-  logo or real footage: a generic player with drawn stand-in videos. The
-  soundtrack is synthesized in code, so there's no music licensing.
-- **2026-10-12 — Cost protection.** Prepaid credits with auto-reload off,
-  a daily cap in the server, a per-install rate limit, a verdict cache keyed by
-  claim text, and checking only on click. No user accounts.
+- **2026-10-19 — Switched from the TikTok fact-checker to a schoolwork
+  assistant.** Dylan's reasons: browser extensions aren't one of the allowed
+  platforms (website, Android, iOS), and "realistically who would use this?"
+  Dylan would actually use a schoolwork tool, and assignments are where their stress
+  goes. An internship finder was considered, but Dylan isn't searching right now.
+  A decision helper, focus sessions, and mood check-ins were also offered; the
+  assistant folds in focus and energy. The TikTok work is saved in commit
+  `f1b634d`; `RESEARCH.md` is the research behind it.
+- **2026-10-19 — Screenshots instead of per-site scrapers.** Dylan's concern:
+  sites like McGraw Hill Connect need clicking around to see dates, and a
+  reader built for one site would be "so specifically tailored to me." A
+  screenshot works for any site and anyone, needs no logins, and avoids
+  scraping. Canvas gets its calendar feed; Gradescope and PrairieLearn have no
+  public student API, so they use screenshots.
+- **2026-10-19 — A language model reads screenshots; TypeSafe checks them**
+  (Dylan picked this over OCR plus TypeSafe only). Jev can see images but
+  returns typed judgments, not text, so a vision language model lists the
+  assignments and TypeSafe verifies each row against the image. Images in
+  TypeSafe are an early beta ("Dreamer-ready"), another reason to show
+  "Check this" flags. Which language model: pending (Claude recommends Claude
+  Haiku 5.5).
+- **2026-10-19 — Learning from real time spent.** Dylan wanted it to improve
+  over time. AI to-do apps already exist (Motion, Reclaim, Todoist); the parts
+  you can't download are import from any course site and estimates that learn
+  from Dylan's own pace.
+- **2026-10-20 — Website plus Discord bot, both full.** Dylan wants to use it
+  from their phone through Discord, and decided a website is still worth it for
+  what a bot can't show. A website keeps it within the allowed platforms, so
+  no email to course staff is needed. Discord over text messages because it's
+  easier to build.
+- **2026-10-20 — Ambitious scope on purpose.** Dylan wants everything from the
+  website to the bot and isn't worried about the 24-hour budget. Build in the
+  order under Next so each step is usable on its own.
+- Still to decide: stack, hosting (the bot needs an always-on server), and
+  where data is stored (browser only, or an account so it reaches the phone).
 
 ## Problems
 
-- **2026-10-12 — Couldn't confirm caption field names.** Both videos inspected
-  live were music-only, and then TikTok showed a CAPTCHA, which Claude does not
-  solve. Caption parsing uses field names from earlier TikTok pages and accepts
-  both known spellings; Dylan's first live test confirms them.
-- **2026-10-12 — Trailer render failed on this laptop.** Windows blocks some
-  unsigned programs (Smart App Control): Remotion's downloaded headless Chrome
-  and its `ffprobe.exe` were refused, while `ffmpeg.exe` was allowed. Fixes:
-  `promo/remotion.config.ts` renders with the installed (signed) Chrome, and
-  the soundtrack is added with ffmpeg after rendering so ffprobe is never
-  needed. Also, TypeScript 7 lacks the API Remotion uses to read tsconfig
-  (JSX broke), so `promo/` pins TypeScript 5.
+(none yet for this app)
