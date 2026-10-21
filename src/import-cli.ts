@@ -1,5 +1,5 @@
 // Usage: npm run import -- path/to/screenshot.png
-// Prints the assignments found in a screenshot, flagging rows to double-check.
+// Prints the assignments found in a screenshot, with any flags to double-check.
 import { readFile } from "node:fs/promises";
 import { describeDue, importScreenshot } from "./import-screenshot.ts";
 
@@ -18,17 +18,18 @@ try {
 }
 
 try {
-  const assignments = await importScreenshot(bytes);
-  if (assignments.length === 0) {
+  const rows = await importScreenshot(bytes);
+  if (rows.length === 0)
     console.log("No assignments found in that screenshot.");
-  }
-  for (const assignment of assignments) {
-    const flag = assignment.needsCheck ? "CHECK THIS" : "ok";
-    const percent = (p: number) => `${Math.round(p * 100)}%`;
+  const percent = (p: number) => `${Math.round(p * 100)}%`;
+  for (const row of rows) {
+    const label = !row.include ? "LEFT OUT" : (row.flag ?? "ok");
     console.log(
-      `[${flag}] ${assignment.name}${assignment.course ? ` (${assignment.course})` : ""}, ` +
-        `${describeDue(assignment.dueAt)}, ${assignment.status}` +
-        `  · date match ${percent(assignment.dueProbability)}, open ${percent(assignment.openProbability)}`,
+      `[${label}] ${row.name}${row.course ? ` (${row.course})` : ""}, ` +
+        `${describeDue(row.dueAt)}, ${row.status}` +
+        `  · date ${percent(row.dueProbability)}, ` +
+        `TypeSafe status ${row.statusChoice} ${percent(row.statusProbability)}, ` +
+        `grade total ${percent(row.totalProbability)}`,
     );
   }
 } catch (error) {

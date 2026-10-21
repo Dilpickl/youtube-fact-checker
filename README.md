@@ -19,7 +19,16 @@ TYPESAFE_API_KEY=...
 ANTHROPIC_API_KEY=...
 ```
 
-## Import a screenshot
+## Run the website
+
+```bash
+npm start
+```
+
+Then open http://localhost:3000. Saved assignments live in `data/assignments.db`
+(Git ignores it).
+
+## Import a screenshot from the command line
 
 ```bash
 npm run import -- test/fixtures/connect-capitolo5.png

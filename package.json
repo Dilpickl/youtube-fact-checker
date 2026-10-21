@@ -4,13 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "npm run build && node --env-file=.env src/server.ts",
+    "build": "esbuild web/app.ts --bundle --format=esm --target=es2022 --outfile=dist/app.js",
     "import": "node --env-file=.env src/import-cli.ts",
     "typecheck": "tsc",
     "test": "node --test \"test/**/*.test.ts\"",
-    "format": "prettier --write src test"
+    "format": "prettier --write src test web"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
     "prettier": "^3.9.10",
     "typescript": "^7.0.2"
   },

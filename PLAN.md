@@ -37,7 +37,7 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
 
 ## Next
 
-1. **Milestone 2, website:** review and fix an import, save assignments, add
+1. **Milestone 2, website (built 2026-10-21, not yet tried by Dylan):** review and fix an import, save assignments, add
    more screenshots
    (merge duplicates, apply updates).
 2. "What now?": energy level, one task, reason, start-by time, "Not now".
@@ -106,6 +106,15 @@ numbers are the resume evidence Dylan wants.
   where data is stored (browser only, or an account so it reaches the phone).
 
 ## Problems
+
+- **2026-10-21 — Grade totals can't be told apart from the image alone.**
+  Canvas lists Connect work as "Chapter 1–4" grade lines. Without a hint taken
+  from the test screenshot (removed as unfair), Haiku and TypeSafe disagree and
+  vary run to run. Resolved by design: disagreements are flagged in review, and
+  rows the student leaves out are saved as ignored so later imports skip them.
+- **2026-10-21 — "Due Dec 4 → Dec 4" false change.** A screenshot without a
+  time zone got a different guessed offset; changes now compare the clock time
+  shown.
 
 - **2026-10-20 — TypeSafe rejected the screenshot ("Invalid image
   dimensions").** TypeSafe accepts 280 to 1568 pixels per side and never

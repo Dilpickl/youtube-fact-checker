@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import sharp from "sharp";
+import type { Status } from "../src/assignment.ts";
 import {
   describeDue,
   fitImage,
@@ -32,27 +33,80 @@ test("writes due dates the way the course page shows them", () => {
   assert.equal(describeDue(null), "with no due date shown");
 });
 
-test("fills in, defers, or flags the status from TypeSafe's check", () => {
-  const row = (
-    status: "open" | "closed" | "unknown",
-    due: number,
-    open: number,
-  ) => resolveRow(status, due, open);
-  // From the live Connect run: Claude couldn't tell, TypeSafe was 91% sure it's open.
-  assert.deepEqual(row("unknown", 1, 0.91), {
+const DATED = "2026-10-20T23:59:00-05:00";
+const sure = (statusChoice: Status, statusProbability = 0.9) => ({
+  dueProbability: 1,
+  statusChoice,
+  statusProbability,
+  totalProbability: 0.1,
+});
+
+test("fills in, defers to, or flags the status from TypeSafe's check", () => {
+  const task = (status: Status) => ({
+    status,
+    kind: "task" as const,
+    dueAt: DATED,
+  });
+  // Live Connect run: Claude couldn't tell, TypeSafe was 92% sure it's open.
+  assert.deepEqual(resolveRow(task("unknown"), sure("open", 0.92)), {
     status: "open",
-    needsCheck: false,
+    include: true,
+    flag: null,
   });
-  // TypeSafe unsure (near 50%) defers to Claude instead of flagging.
-  assert.deepEqual(row("closed", 1, 0.48), {
-    status: "closed",
-    needsCheck: false,
-  });
+  // TypeSafe unsure defers to Claude instead of flagging.
+  assert.equal(resolveRow(task("closed"), sure("open", 0.5)).flag, null);
   assert.equal(
-    row("closed", 1, 0.9).needsCheck,
-    true,
+    resolveRow(task("closed"), sure("open")).flag,
+    "Check the status",
     "confident contradiction",
   );
-  assert.equal(row("open", 0.4, 0.9).needsCheck, true, "doubtful due date");
-  assert.equal(row("unknown", 1, 0.5).needsCheck, true, "neither can tell");
+  assert.equal(
+    resolveRow(task("open"), { ...sure("open"), dueProbability: 0.4 }).flag,
+    "Check the date",
+  );
+});
+
+// Live Canvas run: "Not available until Oct 26" was misread as closed.
+test("keeps 'not open yet' apart from closed", () => {
+  const row = {
+    status: "not_open_yet" as const,
+    kind: "task" as const,
+    dueAt: DATED,
+  };
+  assert.deepEqual(resolveRow(row, sure("not_open_yet")), {
+    status: "not_open_yet",
+    include: true,
+    flag: null,
+  });
+});
+
+// Live Canvas run: "Chapter 1" and "Participation" are grade totals, not tasks.
+test("leaves out grade totals, and flags rows the models disagree on", () => {
+  const total = {
+    status: "closed" as const,
+    kind: "grade_total" as const,
+    dueAt: null,
+  };
+  const both = resolveRow(total, { ...sure("closed"), totalProbability: 0.9 });
+  assert.equal(both.include, false);
+  const onlyClaude = resolveRow(total, sure("closed"));
+  assert.deepEqual(
+    [onlyClaude.include, onlyClaude.flag],
+    [false, "Might be a grade total"],
+  );
+});
+
+test("asks for a date on undated work that isn't finished", () => {
+  const exam = {
+    status: "unknown" as const,
+    kind: "task" as const,
+    dueAt: null,
+  };
+  assert.equal(resolveRow(exam, sure("unknown", 0.5)).flag, "Needs a date");
+  const doneQuiz = {
+    status: "closed" as const,
+    kind: "task" as const,
+    dueAt: null,
+  };
+  assert.equal(resolveRow(doneQuiz, sure("closed")).flag, null);
 });

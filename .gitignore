@@ -15,6 +15,5 @@ DerivedData/
 __pycache__/
 .venv/
 
-# Promo trailer: rendered output and generated soundtrack (rebuild with npm run render)
-promo/out/
-promo/public/soundtrack.wav
+# Saved assignments (personal data)
+data/
