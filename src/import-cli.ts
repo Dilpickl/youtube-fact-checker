@@ -1,7 +1,11 @@
-// Usage: npm run import -- path/to/screenshot.png
-// Prints the assignments found in a screenshot, with any flags to double-check.
+// Usage: npm run import -- path/to/screenshot.png   (or page-text.txt)
+// Prints the assignments found, with any flags to double-check.
 import { readFile } from "node:fs/promises";
-import { describeDue, importScreenshot } from "./import-screenshot.ts";
+import {
+  describeDue,
+  importScreenshot,
+  importText,
+} from "./import-screenshot.ts";
 
 const path = process.argv[2];
 if (!path) {
@@ -18,7 +22,9 @@ try {
 }
 
 try {
-  const rows = await importScreenshot(bytes);
+  const rows = path.endsWith(".txt")
+    ? await importText(new TextDecoder().decode(bytes))
+    : await importScreenshot(bytes);
   if (rows.length === 0)
     console.log("No assignments found in that screenshot.");
   const percent = (p: number) => `${Math.round(p * 100)}%`;

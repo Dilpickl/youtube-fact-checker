@@ -1,5 +1,5 @@
 // The website's server: the pages, plus a small JSON API for importing
-// screenshots, checking the Canvas feed, saving reviewed rows, estimating
+// screenshots and page text or links, checking the Canvas feed, saving reviewed rows, estimating
 // work, logging work sessions, and changing an assignment's status.
 // Start it with `npm start`, which restarts it when code changes.
 import { mkdirSync } from "node:fs";
@@ -18,8 +18,11 @@ import {
 } from "./assignment.ts";
 import { feedRows, feedUrlProblem, newOrChanged, parseFeed } from "./canvas.ts";
 import { typeSafeEstimateMinutes, type EstimateMinutes } from "./estimate.ts";
+import { fetchPage, linkProblem, pageText } from "./import-link.ts";
 import {
   importScreenshot,
+  importText,
+  MAX_PAGE_CHARACTERS,
   type CheckedAssignment,
 } from "./import-screenshot.ts";
 import {
@@ -68,6 +71,12 @@ const WorkRequest = z.object({
 
 const CanvasRequest = z.object({ feedUrl: z.string().max(2000) });
 
+/** Pasted page text, or a link to a public page; exactly one. */
+const PageRequest = z.union([
+  z.object({ text: z.string().max(4 * MAX_PAGE_CHARACTERS) }),
+  z.object({ url: z.string().max(2000) }),
+]);
+
 const CANVAS_FEED = "canvasFeedUrl";
 const CANVAS_CHECKED = "canvasLastChecked";
 
@@ -95,6 +104,8 @@ class HttpError extends Error {
 /** What the server calls out to; tests swap in fakes. */
 export interface Services {
   readScreenshot: (bytes: Uint8Array) => Promise<CheckedAssignment[]>;
+  readText: (text: string) => Promise<CheckedAssignment[]>;
+  fetchPage: (url: string) => Promise<string>;
   match: typeof matchRows;
   fetchFeed: (url: string) => Promise<string>;
   estimate: EstimateMinutes;
@@ -105,6 +116,8 @@ export interface Services {
 export function createApp(store: Store, overrides: Partial<Services> = {}) {
   const services: Services = {
     readScreenshot: importScreenshot,
+    readText: importText,
+    fetchPage,
     match: matchRows,
     fetchFeed,
     estimate: typeSafeEstimateMinutes,
@@ -174,6 +187,36 @@ async function route(
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new HttpError(502, `Couldn't read that screenshot: ${reason}`);
+    }
+  } else if (request.method === "POST" && path === "/api/import-page") {
+    const parsed = PageRequest.safeParse(await readJson(request));
+    if (!parsed.success) {
+      throw new HttpError(400, "Paste some text or a link first.");
+    }
+    let text: string;
+    if ("url" in parsed.data) {
+      const problem = linkProblem(parsed.data.url);
+      if (problem) throw new HttpError(400, problem);
+      try {
+        text = pageText(await services.fetchPage(parsed.data.url.trim()));
+      } catch (error) {
+        throw new HttpError(
+          400,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    } else {
+      text = parsed.data.text;
+      if (!text.trim()) throw new HttpError(400, "Paste some text first.");
+    }
+    try {
+      const rows = await services.readText(text);
+      sendJson(response, 200, {
+        rows: await services.match(rows, store.list()),
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new HttpError(502, `Couldn't read that page: ${reason}`);
     }
   } else if (request.method === "POST" && path === "/api/save") {
     const json = await readJson(request);

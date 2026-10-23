@@ -224,6 +224,28 @@ button:disabled {
   color: var(--danger);
 }
 
+/* Paste text or link */
+.paste-box {
+  margin-top: 16px;
+}
+
+.paste-box textarea {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--page);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.plan-header .actions {
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+
 /* Canvas */
 .canvas-bar {
   display: flex;
@@ -268,6 +290,56 @@ button.link {
 
 .review-row.left-out .fields {
   opacity: 0.55;
+}
+
+.review-group {
+  margin: 20px 0 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.review-row.compact {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.review-row.compact input[type="checkbox"] {
+  margin-top: 5px;
+}
+
+.review-row.compact details {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-row.compact summary {
+  margin-top: 0;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.compact-name {
+  font-weight: 500;
+}
+
+.bulk-course {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.bulk-course input {
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--page);
+  color: var(--text);
+  font: inherit;
 }
 
 .review-row .top {

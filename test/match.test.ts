@@ -189,3 +189,48 @@ test("the same course spelled differently still matches", async () => {
   );
   assert.equal(row.match.kind, "same");
 });
+
+// Pasting Canvas text showed "Closed → Open" for work Dylan had finished,
+// because the page still said "Available until Oct 23".
+test("an import never reopens work the student marked done", async () => {
+  const finished = saved({
+    status: "closed",
+    closedAt: "2026-10-22T22:00:00.000Z",
+  });
+  const [row] = await reviewImport(
+    [imported({ status: "open" })],
+    [finished],
+    judges(),
+  );
+  assert.equal(row.status, "closed");
+  assert.deepEqual(row.match, { kind: "same", id: 1, changes: [] });
+
+  // Closed by the site (no done time): a site saying it's open again wins.
+  const locked = saved({ status: "closed" });
+  const [reopened] = await reviewImport(
+    [imported({ status: "open" })],
+    [locked],
+    judges(),
+  );
+  assert.equal(reopened.status, "open");
+});
+
+// Dylan was asked whether "HW6 Week 6" was the same as "Chapter 1", a left-out
+// Italian grade total with no course or date.
+test("never asks about left-out or undated rows", async () => {
+  const rows = await reviewImport(
+    [
+      imported({ name: "HW6 Week 6", course: "MATH 257", dueAt: null }),
+      imported({ name: "Quiz 9", course: "MATH 257" }),
+    ],
+    [
+      saved({ name: "Chapter 1", course: "", dueAt: null, ignored: true }),
+      saved({ id: 2, name: "Old quiz", course: "", ignored: true }),
+    ],
+    judges(),
+  );
+  assert.deepEqual(
+    rows.map((row) => row.match.kind),
+    ["new", "new"],
+  );
+});

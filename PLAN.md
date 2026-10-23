@@ -54,26 +54,29 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
   the local database and is never sent back to the page); Check Canvas, and an
   automatic check every 6 hours, bring in only new or changed upcoming
   assignments for review. Dylan connected the real feed (ENG 100, ITAL 101).
+- 2026-10-23: Paste text or a link on Plan, beside screenshots. Text works on
+  pages behind a login; links work for public pages. Dylan imported math by
+  text and physics by screenshot; both led to the accuracy fixes below. The
+  compact review (Save first, questions first, one-line rows) is not yet tried
+  by Dylan; their physics and math rows were removed to re-import.
 
 ## Next
 
-1. **Paste text or a link** as another way to import, beside screenshots;
-   text works on pages behind a login (Gradescope, PrairieLearn, Connect).
-2. Class schedule and time available; also feeds the Today itinerary and the
+1. Class schedule and time available; also feeds the Today itinerary and the
    debriefs.
-3. Focus timer: records real time spent (sessions currently log the planned
+2. Focus timer: records real time spent (sessions currently log the planned
    minutes).
-4. Learning: compare real times with estimates, adjust per course; learn which
+3. Learning: compare real times with estimates, adjust per course; learn which
    hours Dylan focuses best; tune session sizes.
-5. Discord bot: add tasks by message or photo, "what now?", morning debrief
+4. Discord bot: add tasks by message or photo, "what now?", morning debrief
    (due today, keeping up, first class, weather).
-6. Evening "prep for tomorrow" debrief.
-7. Exams: dated exams become study sessions (the scheduler already splits big
+5. Evening "prep for tomorrow" debrief.
+6. Exams: dated exams become study sessions (the scheduler already splits big
    tasks); "tests the next day take precedence."
-8. Travel time to first class (needs a maps API).
-9. Maybe: a Canvas access token for submission status (the feed doesn't say
+7. Travel time to first class (needs a maps API).
+8. Maybe: a Canvas access token for submission status (the feed doesn't say
    what's submitted), if Illinois allows student tokens.
-10. Shelved for now: a character for the assistant (pickle, owl, or cat
+9. Shelved for now: a character for the assistant (pickle, owl, or cat
     concepts were shown 2026-10-21).
 
 **Reminder for Claude:** once import works, build a test set of real
@@ -124,6 +127,11 @@ numbers are the resume evidence Dylan wants.
   The pace comes from the workload (for each deadline, work due by then over
   days left, finishing a day early, two for big tasks); sessions are 25-60
   min; an hour or less is done in one sitting.
+- **2026-10-23 — Compact review.** Dylan wanted to save without reviewing every
+  row: Save is at the top, rows needing a decision (Same assignment?, flags)
+  come first and open, the rest are one-line summaries that open on click,
+  and left-out rows are folded. A "Course for rows without one" box fills
+  pages that don't show a course.
 - **2026-10-22 — Direct imports.** Canvas has a calendar feed; Gradescope,
   PrairieLearn, and Connect need a login, so they stay screenshots or pasted
   text. Public course sites can be imported by link.
@@ -159,6 +167,19 @@ numbers are the resume evidence Dylan wants.
 
 ## Problems
 
+- **2026-10-23 — Accuracy check on Dylan's physics screenshot and math text.**
+  Found: dates without a year that had passed went to next year (Oct 15 →
+  2027); empty progress bars read as Closed; "Start: Oct 27" not read as Not
+  open yet; four items named just "Homework" (would merge on re-import);
+  pasted text can't tell a score of 100% from "80% until Oct 27" credit, so
+  HW8 looked open; "Not for credit" practice imported as work. Fixed: nearest
+  year, progress-bar and start-date rules, headings in generic names, an
+  "optional" kind left out by default. Re-run on the same screenshots: physics
+  and math statuses and dates all right. Advice recorded: screenshots for pages
+  that show progress as bars or scores, text for pages that say it in words.
+- **2026-10-23 — "Same assignment as Chapter 1?"** A left-out row with no course
+  or date paired with anything undated. Fuzzy matching now skips left-out rows
+  and needs both due dates.
 - **2026-10-22 — Canvas saved every Italian assignment twice.** The feed names
   courses with codes like "ital_101_120268_264325", which didn't match the
   saved "ITAL 101", so the duplicate check (which only compares within a

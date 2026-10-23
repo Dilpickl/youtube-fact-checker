@@ -1,7 +1,7 @@
-// Turns a screenshot of any course site into a checked list of assignments.
-// Claude Haiku reads the image and lists what it sees (TypeSafe answers
+// Turns a screenshot or the text of any course page into a checked list of
+// assignments. Claude Haiku reads it and lists what it sees (TypeSafe answers
 // questions but doesn't write text); TypeSafe then checks each row against the
-// same image, and rows it doubts are flagged for the student to confirm.
+// same screenshot or text, and rows it doubts are flagged for the student.
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { choice, image, noul, TypeSafeClient } from "@typesafe-ai/sdk";
@@ -23,7 +23,7 @@ const ExtractedSchema = z.object({
   course: z.string(),
   dueAt: z.string().nullable(),
   status: z.enum(STATUSES),
-  kind: z.enum(["task", "grade_total"]),
+  kind: z.enum(["task", "grade_total", "optional"]),
 });
 const ExtractionSchema = z.object({ assignments: z.array(ExtractedSchema) });
 
@@ -50,14 +50,22 @@ export interface CheckedAssignment extends RowCheck {
 }
 
 const STATUS_MEANINGS: Record<Status, string> = {
-  open: "It can be worked on now.",
+  open: "It can be worked on now and isn't finished, for example an empty progress bar or 'Not started'.",
   not_open_yet:
-    "The page says it isn't available yet, for example 'Not available until …'.",
-  closed: "It is locked, submitted, completed, or past due.",
+    "It isn't available yet, for example 'Not available until …' or a start date that hasn't come.",
+  closed:
+    "It is finished or can't be worked on: locked, submitted, completed (a full progress bar or a 100% score), or past due.",
   unknown: "The page doesn't show whether it can be worked on.",
 };
 
 export type ImageFormat = "png" | "jpeg";
+
+/** What an import reads: a screenshot (already resized) or a page's text. */
+type Source =
+  { kind: "screenshot"; bytes: Uint8Array } | { kind: "page"; text: string };
+
+/** Pasted page text past this is cut off; course pages are far shorter. */
+export const MAX_PAGE_CHARACTERS = 60_000;
 
 /** Reads the format from the file's first bytes; both APIs accept only these two. */
 export function imageFormat(bytes: Uint8Array): ImageFormat | null {
@@ -83,6 +91,11 @@ export function resolveRow(
     extracted.status !== "unknown" &&
     typeSafeStatus !== "unknown" &&
     typeSafeStatus !== extracted.status;
+
+  // Optional or not-for-credit work: listed, but left out unless chosen.
+  if (extracted.kind === "optional") {
+    return { status, include: false, flag: null };
+  }
 
   const claudeSaysTotal = extracted.kind === "grade_total";
   const typeSafeSaysTotal = check.totalProbability >= 0.5;
@@ -156,10 +169,27 @@ export function describeDue(dueAt: string | null): string {
 }
 
 async function extractAssignments(
-  bytes: Uint8Array,
-  format: ImageFormat,
+  source: Source,
   today: Date,
 ): Promise<Extracted[]> {
+  const page: Anthropic.ContentBlockParam =
+    source.kind === "screenshot"
+      ? {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/png",
+            data: Buffer.from(source.bytes).toString("base64"),
+          },
+        }
+      : {
+          type: "text",
+          text: `Here is the text of a course web page:\n\n<page>\n${source.text}\n</page>`,
+        };
+  const what =
+    source.kind === "screenshot"
+      ? "This is a screenshot of a course website."
+      : "That is the text of a course website, copied from the page.";
   const client = new Anthropic();
   const response = await client.messages.parse({
     model: EXTRACT_MODEL,
@@ -169,22 +199,15 @@ async function extractAssignments(
       {
         role: "user",
         content: [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: `image/${format}`,
-              data: Buffer.from(bytes).toString("base64"),
-            },
-          },
+          page,
           {
             type: "text",
-            text: `This is a screenshot of a course website. List every assignment, quiz, exam, or other task it shows.
-- name: exactly as written on the page.
+            text: `${what} List every assignment, quiz, exam, or other task it shows.
+- name: exactly as written on the page. If the name alone is generic and the page groups items under headings (for example several items called "Homework" under "18. Rotational Dynamics" and "19. Rotational Statics"), write the heading first: "18. Rotational Dynamics: Homework".
 - course: the course code if the page shows one anywhere, including in a link or breadcrumb (for example "ITAL 101"), otherwise "".
-- dueAt: the due date and time exactly as the page shows them, written as YYYY-MM-DDTHH:MM in 24-hour time with no time zone, for example "2026-11-13T23:59". If no year is shown, use the next such date on or after ${today.toDateString()}. If there's no due date, null. Use the due date, never a start or available date.
-- status: "not_open_yet" if the page says it isn't available yet (for example "Not available until Oct 26"); "closed" if it's locked, submitted, completed, or past due; "open" if it can be worked on now; "unknown" if the page doesn't say.
-- kind: "grade_total" if the row is a gradebook category or running total rather than one piece of work: it typically has no due date and shows points earned out of a large total that adds up many smaller assignments. Otherwise "task".
+- dueAt: the due date and time exactly as the page shows them, written as YYYY-MM-DDTHH:MM in 24-hour time with no time zone, for example "2026-11-13T23:59". If no year is shown, use ${today.getFullYear()}. If there's no due date, null. Use the due date, never a start or available date.
+- status: "not_open_yet" if it isn't available yet (for example "Not available until Oct 26", or "Start: Oct 27" when that's after ${today.toDateString()}); "closed" if it's locked, submitted, completed, or past due; "open" if it can be worked on now and isn't finished; "unknown" if the page doesn't say. Progress bars and scores show completion: a full or green bar, a checkmark, or a score like 100% means it's done ("closed"); an empty bar or "Not started" means it's still to do. A percentage beside a date, such as "80% until Oct 27" or "for 80% credit", is the credit available, not progress.
+- kind: "grade_total" if the row is a gradebook category or running total rather than one piece of work: it typically has no due date and shows points earned out of a large total that adds up many smaller assignments. "optional" if it doesn't count for credit (marked "Optional" or "Not for credit"). Otherwise "task".
 Include only what is visible. Don't invent tasks or dates.`,
           },
         ],
@@ -192,7 +215,9 @@ Include only what is visible. Don't invent tasks or dates.`,
     ],
   });
   if (response.stop_reason === "refusal" || !response.parsed_output) {
-    throw new Error("Claude couldn't read assignments from that screenshot.");
+    throw new Error(
+      `Claude couldn't read assignments from that ${source.kind}.`,
+    );
   }
   // The model copies the clock time; code adds the offset, so daylight saving
   // time is right (the model gave November dates the October offset).
@@ -202,40 +227,63 @@ Include only what is visible. Don't invent tasks or dates.`,
     )?.[0];
     return {
       ...row,
-      dueAt: wallClock ? wallClockToIso(wallClock, TIME_ZONE) : null,
+      dueAt: wallClock
+        ? wallClockToIso(nearestYear(wallClock, today), TIME_ZONE)
+        : null,
     };
   });
 }
 
+/**
+ * Pages rarely show the year, so pick the year that puts the date closest to
+ * today: Oct 15 seen on Oct 22 is this year (it was "next year" before, which
+ * made last week's work due in 2027), and Jan 10 seen in the fall is next year.
+ */
+export function nearestYear(wallClock: string, today: Date): string {
+  const year = Number(wallClock.slice(0, 4));
+  const candidates = [year - 1, year, year + 1].map(
+    (y) => `${y}${wallClock.slice(4)}`,
+  );
+  const distance = (candidate: string) =>
+    Math.abs(Date.parse(`${candidate}:00Z`) - today.getTime());
+  return candidates.reduce((best, candidate) =>
+    distance(candidate) < distance(best) ? candidate : best,
+  );
+}
+
 async function checkAssignments(
-  bytes: Uint8Array,
+  source: Source,
   today: Date,
   rows: Extracted[],
 ): Promise<CheckedAssignment[]> {
   if (rows.length === 0) return [];
-  const client = new TypeSafeClient({
-    defaultHeaders: { "TypeSafe-Danger-Zone-Images": "true" },
-  });
+  const client = new TypeSafeClient(
+    source.kind === "screenshot"
+      ? { defaultHeaders: { "TypeSafe-Danger-Zone-Images": "true" } }
+      : {},
+  );
+  // Questions name what they look at: `screenshot` or `page` in the state.
+  const ref = `\`${source.kind}\``;
   // All rows go in one request; TypeSafe answers the questions in parallel.
   const questions = Object.fromEntries(
     rows.flatMap((row, index) => [
       [
         `due${index}`,
         noul(
-          `Does \`screenshot\` show a task named "${row.name}" ${describeDue(row.dueAt)}?`,
+          `Does ${ref} show a task named "${row.name}" ${describeDue(row.dueAt)}?`,
         ),
       ],
       [
         `status${index}`,
         choice(
-          `Today is \`today\`. In \`screenshot\`, what is the status of "${row.name}"?`,
+          `Today is \`today\`. In ${ref}, what is the status of "${row.name}"?`,
           STATUS_MEANINGS,
         ),
       ],
       [
         `total${index}`,
         noul(
-          `In \`screenshot\`, is "${row.name}" a gradebook category or running total (points summed across many smaller assignments), rather than one assignment, quiz, exam, or discussion the student submits?`,
+          `In ${ref}, is "${row.name}" a gradebook category or running total (points summed across many smaller assignments), rather than one assignment, quiz, exam, or discussion the student submits?`,
         ),
       ],
     ]),
@@ -250,7 +298,8 @@ async function checkAssignments(
         day: "numeric",
         year: "numeric",
       }),
-      screenshot: image(bytes),
+      [source.kind]:
+        source.kind === "screenshot" ? image(source.bytes) : source.text,
     },
     questions,
   });
@@ -286,9 +335,27 @@ export async function importScreenshot(
   if (!imageFormat(bytes)) {
     throw new Error("Screenshots must be PNG or JPEG images.");
   }
-  const fitted = await fitImage(bytes);
-  const rows = await extractAssignments(fitted, "png", today);
-  return checkAssignments(fitted, today, rows);
+  const source: Source = { kind: "screenshot", bytes: await fitImage(bytes) };
+  return checkAssignments(
+    source,
+    today,
+    await extractAssignments(source, today),
+  );
+}
+
+/** The same import for text copied from a page (or read from a link). */
+export async function importText(
+  text: string,
+  today = new Date(),
+): Promise<CheckedAssignment[]> {
+  const trimmed = text.trim().slice(0, MAX_PAGE_CHARACTERS);
+  if (!trimmed) throw new Error("There's no text to read.");
+  const source: Source = { kind: "page", text: trimmed };
+  return checkAssignments(
+    source,
+    today,
+    await extractAssignments(source, today),
+  );
 }
 
 /**

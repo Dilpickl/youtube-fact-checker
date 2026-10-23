@@ -30,7 +30,7 @@ If the **Project** section below is still empty, this is the first session. Befo
 
 - **Vision:** A schoolwork assistant that tells Dylan what to do right now. Assignments come in from screenshots of any course site (a vision language model reads them, TypeSafe checks each row) and later Canvas's calendar feed. "What now?" picks one task with a reason and a start-by time from the deadline, the task's size, and Dylan's energy. A focus timer records real time spent, so estimates improve over time. A Discord bot adds tasks by message or photo from the phone and sends morning and evening debriefs. Judgments use TypeSafe. The earlier TikTok fact-checker is shelved (commit `f1b634d`, `RESEARCH.md`).
 - **Platform:** Website plus a server that also runs a Discord bot. The website covers import review, the week view, progress, and setup; Discord covers quick use from the phone. A classmate tries it from the website link or by joining the Discord server. Stack: TypeScript on Node 24, built-in SQLite, esbuild for the page; hosting not chosen yet.
-- **Current milestone:** Importing by pasted text or a link, beside screenshots (text works on pages behind a login). Done so far: screenshot import, the website (Plan, review, saving, merging), "What now?" with a workload-driven plan, the History page, and the Canvas calendar feed.
+- **Current milestone:** To be chosen with Dylan (see Next in PLAN.md). Done so far: screenshot import, the website (Plan, review, saving, merging), "What now?" with a workload-driven plan, the History page, the Canvas calendar feed, and importing by pasted text or link.
 
 ## Keeping PLAN.md
 

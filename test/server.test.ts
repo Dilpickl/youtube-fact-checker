@@ -34,6 +34,9 @@ let fetchedFeed = "";
 
 const server = createApp(openStore(":memory:"), {
   readScreenshot: async () => [checkedRow],
+  readText: async (text) => [{ ...checkedRow, name: text.split("\n")[0] }],
+  fetchPage: async () =>
+    `<h1>Week 9</h1><p>${"Homework 9 is due Friday. ".repeat(10)}</p>`,
   // Treats every row as new; matching itself is tested in match.test.ts.
   match: async (rows) =>
     rows.map((row): ReviewRow => ({
@@ -180,4 +183,30 @@ test("connects a Canvas feed, checks it, and never sends the link back", async (
     lastChecked: null,
   });
   assert.equal((await post("/api/canvas/check", "")).status, 400);
+});
+
+test("imports pasted text or a public link, and explains bad links", async () => {
+  const fromText = await post(
+    "/api/import-page",
+    JSON.stringify({ text: "Quiz 7\nDue Friday" }),
+  );
+  const pasted = (await fromText.json()) as { rows: ReviewRow[] };
+  assert.equal(pasted.rows[0].name, "Quiz 7");
+
+  const fromLink = await post(
+    "/api/import-page",
+    JSON.stringify({ url: "https://cs124.org/week9" }),
+  );
+  const linked = (await fromLink.json()) as { rows: ReviewRow[] };
+  assert.equal(linked.rows[0].name, "Week 9", "read the page's text");
+
+  const local = await post(
+    "/api/import-page",
+    JSON.stringify({ url: "https://localhost:3000/" }),
+  );
+  assert.equal(local.status, 400);
+  assert.match(((await local.json()) as { error: string }).error, /public/);
+
+  const empty = await post("/api/import-page", JSON.stringify({ text: "  " }));
+  assert.equal(empty.status, 400);
 });

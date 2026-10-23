@@ -1,6 +1,6 @@
 // Decides how each imported row relates to what's already saved, so the same
 // assignment is never saved twice. Code finds the candidates (same name, or
-// same course with a due date within a day); TypeSafe judges the candidates
+// same course with due dates within a day); TypeSafe judges the candidates
 // whose names differ, like "Connect: Lessico 6" on Canvas and "Lessico- 6".
 // Rows whose screenshot didn't show a course get one inferred first.
 import { choice, noul, TypeSafeClient } from "@typesafe-ai/sdk";
@@ -11,6 +11,7 @@ import {
   type Match,
   type ReviewRow,
   type SavedAssignment,
+  type Status,
 } from "./assignment.ts";
 import { CONFIDENT, type CheckedAssignment } from "./import-screenshot.ts";
 
@@ -32,8 +33,9 @@ const courseKey = (course: string) => normalizeName(courseCode(course));
 const coursesFit = (a: string, b: string) =>
   !a || !b || courseKey(a) === courseKey(b);
 
+/** Both dated, within a day: undated rows are too vague to pair by date. */
 const datesClose = (a: string | null, b: string | null) =>
-  a && b ? Math.abs(Date.parse(a) - Date.parse(b)) <= DAY_MS : a === b;
+  a !== null && b !== null && Math.abs(Date.parse(a) - Date.parse(b)) <= DAY_MS;
 
 export interface CandidatePair {
   imported: CheckedAssignment;
@@ -82,7 +84,9 @@ export async function reviewImport(
   rows.forEach((row, index) => {
     if (exact[index]) return;
     for (const candidate of saved) {
+      // Left-out rows (like a "Chapter 1" grade total) only match by name.
       if (
+        !candidate.ignored &&
         coursesFit(row.course, candidate.course) &&
         datesClose(row.dueAt, candidate.dueAt)
       ) {
@@ -106,7 +110,8 @@ export async function reviewImport(
       }
     }
     if (target) {
-      match = { kind: "same", id: target.id, changes: changes(target, row) };
+      const changed = target.ignored ? [] : changes(target, row);
+      match = { kind: "same", id: target.id, changes: changed };
     }
     // Fill what this screenshot didn't show from what's already saved.
     const dueAt = row.dueAt ?? target?.dueAt ?? null;
@@ -114,7 +119,7 @@ export async function reviewImport(
       name: row.name,
       course: row.course || target?.course || "",
       dueAt,
-      status: row.status === "unknown" && target ? target.status : row.status,
+      status: statusAfterImport(row.status, target),
       include: target?.ignored ? false : row.include,
       flag:
         target?.ignored || (row.flag === "Needs a date" && dueAt)
@@ -174,6 +179,20 @@ export function courseExamples(saved: SavedAssignment[]): CourseExamples[] {
   return [...courses.values()];
 }
 
+/**
+ * A site only knows whether work is available, not whether the student has
+ * done it, so work the student marked done stays done. Otherwise the import
+ * wins, unless it couldn't tell.
+ */
+function statusAfterImport(
+  imported: Status,
+  saved: SavedAssignment | undefined,
+): Status {
+  if (!saved) return imported;
+  if (saved.status === "closed" && saved.closedAt) return "closed";
+  return imported === "unknown" ? saved.status : imported;
+}
+
 /** What this import would change about a saved assignment, in words. */
 function changes(saved: SavedAssignment, row: CheckedAssignment): string[] {
   const list: string[] = [];
@@ -187,8 +206,9 @@ function changes(saved: SavedAssignment, row: CheckedAssignment): string[] {
   ) {
     list.push(`Due ${shortDate(saved.dueAt)} → ${shortDate(row.dueAt)}`);
   }
-  if (row.status !== "unknown" && row.status !== saved.status) {
-    list.push(`${STATUS_LABELS[saved.status]} → ${STATUS_LABELS[row.status]}`);
+  const status = statusAfterImport(row.status, saved);
+  if (status !== saved.status) {
+    list.push(`${STATUS_LABELS[saved.status]} → ${STATUS_LABELS[status]}`);
   }
   return list;
 }

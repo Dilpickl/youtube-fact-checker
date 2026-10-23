@@ -7,6 +7,7 @@ import {
   describeDue,
   fitImage,
   imageFormat,
+  nearestYear,
   resolveRow,
   wallClockToIso,
 } from "../src/import-screenshot.ts";
@@ -127,4 +128,25 @@ test("adds the right offset on each side of the daylight saving change", () => {
     wallClockToIso("2026-11-13T23:59", "UTC"),
     "2026-11-13T23:59:00+00:00",
   );
+});
+
+// Physics items due Oct 15, imported on Oct 22, were saved as Oct 15, 2027.
+test("picks the year that puts a date closest to today", () => {
+  const oct22 = new Date(2026, 9, 22, 12, 0);
+  assert.equal(nearestYear("2027-10-15T08:00", oct22), "2026-10-15T08:00");
+  assert.equal(nearestYear("2026-11-03T07:00", oct22), "2026-11-03T07:00");
+  assert.equal(nearestYear("2026-01-10T23:59", oct22), "2027-01-10T23:59");
+});
+
+test("leaves optional, not-for-credit work out without a flag", () => {
+  const extra = {
+    status: "open" as const,
+    kind: "optional" as const,
+    dueAt: null,
+  };
+  assert.deepEqual(resolveRow(extra, sure("open")), {
+    status: "open",
+    include: false,
+    flag: null,
+  });
 });

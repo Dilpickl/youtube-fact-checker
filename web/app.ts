@@ -33,7 +33,11 @@ interface Draft extends ReviewRow {
 const state = {
   assignments: null as SavedAssignment[] | null,
   loadFailed: false,
-  importing: false,
+  /** What's being read right now, if anything. */
+  importing: null as "screenshot" | "page" | null,
+  pasteOpen: false,
+  /** What's typed in the paste box, kept across re-renders. */
+  pasteDraft: "",
   saving: false,
   drafts: null as Draft[] | null,
   reviewError: null as string | null,
@@ -50,8 +54,12 @@ const state = {
   canvasDraft: "",
   canvasError: null as string | null,
   checkingCanvas: false,
+  /** Review rows opened for editing, by position in the review. */
+  openRows: new Set<number>(),
+  /** The "Course for rows without one" box in the review. */
+  bulkCourse: "",
   /** Where the rows under review came from. */
-  reviewSource: "screenshot" as "screenshot" | "canvas",
+  reviewSource: "screenshot" as "screenshot" | "canvas" | "page",
 };
 
 const app = document.querySelector<HTMLElement>("#app")!;
@@ -170,7 +178,11 @@ async function ensureEstimates() {
   }
 }
 
-async function importFile(file: File) {
+/** Shared by screenshots and pasted pages: read, then open the review. */
+async function runImport(
+  source: "screenshot" | "page",
+  request: () => Promise<{ rows: ReviewRow[] }>,
+) {
   if (state.drafts) {
     state.notice = {
       text: "Save or cancel the import you're reviewing first.",
@@ -179,6 +191,36 @@ async function importFile(file: File) {
     return render();
   }
   if (state.importing) return;
+  if (location.hash !== "#plan") location.hash = "#plan";
+  state.importing = source;
+  state.notice = null;
+  render();
+  try {
+    const { rows } = await request();
+    if (rows.length === 0) {
+      state.notice = {
+        text: `No assignments found in that ${source}. Try one that shows assignment names and due dates.`,
+        kind: "error",
+      };
+    } else {
+      state.drafts = rows.map((row) => ({ ...row, sameAnswer: null }));
+      state.openRows.clear();
+      state.reviewSource = source;
+      state.reviewError = null;
+      if (source === "page") {
+        state.pasteOpen = false;
+        state.pasteDraft = "";
+      }
+    }
+  } catch (error) {
+    state.notice = { text: messageOf(error), kind: "error" };
+  } finally {
+    state.importing = null;
+    render();
+  }
+}
+
+function importFile(file: File) {
   if (file.type !== "image/png" && file.type !== "image/jpeg") {
     state.notice = {
       text: "That isn't a PNG or JPEG image. Take a screenshot and try again.",
@@ -186,32 +228,33 @@ async function importFile(file: File) {
     };
     return render();
   }
-  if (location.hash !== "#plan") location.hash = "#plan";
-  state.importing = true;
-  state.notice = null;
-  render();
-  try {
-    const { rows } = await api<{ rows: ReviewRow[] }>("/api/import", {
+  return runImport("screenshot", () =>
+    api("/api/import", {
       method: "POST",
       headers: { "Content-Type": file.type },
       body: file,
-    });
-    if (rows.length === 0) {
-      state.notice = {
-        text: "No assignments found in that screenshot. Try one that shows assignment names and due dates.",
-        kind: "error",
-      };
-    } else {
-      state.drafts = rows.map((row) => ({ ...row, sameAnswer: null }));
-      state.reviewSource = "screenshot";
-      state.reviewError = null;
-    }
-  } catch (error) {
-    state.notice = { text: messageOf(error), kind: "error" };
-  } finally {
-    state.importing = false;
-    render();
+    }),
+  );
+}
+
+/** A single https link is fetched by the server; anything else is page text. */
+function importPage() {
+  const pasted = state.pasteDraft.trim();
+  if (!pasted) {
+    state.notice = {
+      text: "Paste a page's text or a link first.",
+      kind: "error",
+    };
+    return render();
   }
+  const isLink = /^https?:[/][/][^ ]+$/.test(pasted);
+  return runImport("page", () =>
+    api("/api/import-page", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(isLink ? { url: pasted } : { text: pasted }),
+    }),
+  );
 }
 
 async function saveDrafts() {
@@ -424,6 +467,7 @@ async function checkCanvas(quiet: boolean) {
     });
     if (rows.length > 0) {
       state.drafts = rows.map((row) => ({ ...row, sameAnswer: null }));
+      state.openRows.clear();
       state.reviewSource = "canvas";
       state.reviewError = null;
     } else if (!quiet) {
@@ -451,6 +495,46 @@ function timeAgo(iso: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function renderPasteBox(): HTMLElement {
+  const box = el("textarea", {
+    rows: "7",
+    "aria-label": "Page text or link",
+    placeholder:
+      "Paste a link to a public course page, or the text of any assignments page (open it, press Ctrl+A, then Ctrl+C).",
+  });
+  box.value = state.pasteDraft;
+  box.addEventListener("input", () => {
+    state.pasteDraft = box.value;
+  });
+  const read = button(
+    state.importing === "page" ? "Reading…" : "Import",
+    () => void importPage(),
+    "primary",
+  );
+  read.disabled = state.importing !== null;
+  return el(
+    "div",
+    { class: "card paste-box" },
+    el("strong", {}, "Paste text or a link"),
+    el(
+      "p",
+      { class: "muted" },
+      "Text works for any page you can see, even ones you have to log in to, like Gradescope or PrairieLearn. Links work for public pages only.",
+    ),
+    box,
+    el(
+      "div",
+      { class: "actions" },
+      read,
+      button("Cancel", () => {
+        state.pasteOpen = false;
+        state.pasteDraft = "";
+        render();
+      }),
+    ),
+  );
 }
 
 function renderCanvasBar(): HTMLElement | null {
@@ -726,11 +810,17 @@ function renderPlan(): Node[] {
     if (file) void importFile(file);
   });
   const add = button(
-    state.importing ? "Reading…" : "Add screenshot",
+    state.importing === "screenshot" ? "Reading…" : "Add screenshot",
     () => fileInput.click(),
     "primary",
   );
-  add.disabled = state.importing || state.drafts !== null;
+  const paste = button("Paste text or link", () => {
+    state.pasteOpen = true;
+    render();
+  });
+  for (const control of [add, paste]) {
+    control.disabled = state.importing !== null || state.drafts !== null;
+  }
 
   return [
     el(
@@ -745,17 +835,20 @@ function renderPlan(): Node[] {
           { class: "hint muted" },
           state.drafts
             ? "Save or cancel this import to add another."
-            : "Add a screenshot of any course page, or paste one with Ctrl+V.",
+            : "Add a screenshot of any course page (or paste one with Ctrl+V), or paste a page's text or link.",
         ),
       ),
-      el("div", {}, add, fileInput),
+      el("div", { class: "actions" }, add, paste, fileInput),
     ),
     renderCanvasBar(),
+    state.pasteOpen && !state.drafts && renderPasteBox(),
     state.importing &&
       el(
         "p",
         { class: "notice", role: "status" },
-        "Reading your screenshot. This takes about 20 seconds…",
+        state.importing === "page"
+          ? "Reading that page…"
+          : "Reading your screenshot…",
       ),
     state.notice && renderNotice(state.notice),
     state.drafts && renderReview(state.drafts),
@@ -977,63 +1070,178 @@ function renderHistory(): Node[] {
 // ---- Review ----
 
 function renderReview(drafts: Draft[]): HTMLElement {
-  const kept = drafts.filter((draft) => draft.include);
-  const leftOut = drafts.filter((draft) => !draft.include);
-  const save = button(
-    state.saving ? "Saving…" : "Save",
-    () => void saveDrafts(),
-    "primary",
-  );
-  save.disabled = state.saving;
-  return el(
-    "section",
-    { class: "card review", "aria-label": "Review import" },
-    el("h2", { style: "margin-top: 0" }, `Review: ${kept.length} to save`),
-    state.reviewSource === "canvas" &&
-      el(
-        "p",
-        { class: "muted" },
-        "New or changed assignments from your Canvas feed.",
-      ),
-    el(
-      "p",
-      { class: "muted" },
-      "Fix anything that's wrong. Untick rows you don't want, like grade totals; later imports will skip them too.",
-    ),
-    ...kept.map((draft) => renderDraft(draft, drafts.indexOf(draft))),
-    leftOut.length > 0 && el("h2", {}, `Left out (${leftOut.length})`),
-    ...leftOut.map((draft) => renderDraft(draft, drafts.indexOf(draft))),
-    state.reviewError &&
-      el("p", { class: "error-text", role: "alert" }, state.reviewError),
-    el(
+  const indexed = drafts.map((draft, index) => ({ draft, index }));
+  const kept = indexed.filter(({ draft }) => draft.include);
+  const leftOut = indexed.filter(({ draft }) => !draft.include);
+  // Questions first, then flagged rows; everything else is collapsed.
+  const needsLook = kept
+    .filter(({ draft }) => draft.match.kind === "ask" || draft.flag)
+    .sort(
+      (a, b) =>
+        Number(b.draft.match.kind === "ask") -
+        Number(a.draft.match.kind === "ask"),
+    );
+  const fine = kept.filter((row) => !needsLook.includes(row));
+
+  const actions = () => {
+    const save = button(
+      state.saving ? "Saving…" : `Save ${kept.length}`,
+      () => void saveDrafts(),
+      "primary",
+    );
+    save.disabled = state.saving;
+    return el(
       "div",
       { class: "actions" },
       save,
       button("Cancel", () => {
         state.drafts = null;
         state.reviewError = null;
+        state.openRows.clear();
         render();
       }),
+    );
+  };
+
+  return el(
+    "section",
+    { class: "card review", "aria-label": "Review import" },
+    el("h2", { style: "margin-top: 0" }, `Review: ${kept.length} to save`),
+    el(
+      "p",
+      { class: "muted" },
+      state.reviewSource === "canvas"
+        ? "New or changed assignments from your Canvas feed. "
+        : state.reviewSource === "page"
+          ? "Assignments found in the page you pasted. "
+          : "Assignments found in your screenshot. ",
+      "Save now, or open any row to fix it. Unticked rows are skipped in later imports too.",
     ),
+    actions(),
+    kept.some(({ draft }) => !draft.course.trim()) && renderBulkCourse(drafts),
+    needsLook.length > 0 &&
+      el("h3", { class: "review-group" }, `Needs a look (${needsLook.length})`),
+    ...needsLook.map(({ draft, index }) => renderDraft(draft, index)),
+    fine.length > 0 &&
+      el("h3", { class: "review-group" }, `Looks fine (${fine.length})`),
+    ...fine.map(({ draft, index }) => renderCompactDraft(draft, index)),
+    leftOut.length > 0 &&
+      el(
+        "details",
+        {},
+        el("summary", {}, `Left out (${leftOut.length})`),
+        ...leftOut.map(({ draft, index }) => renderCompactDraft(draft, index)),
+      ),
+    state.reviewError &&
+      el("p", { class: "error-text", role: "alert" }, state.reviewError),
+    actions(),
   );
 }
 
-function renderDraft(draft: Draft, index: number): HTMLElement {
-  const keep = el("input", { type: "checkbox" });
+function renderBulkCourse(drafts: Draft[]): HTMLElement {
+  const input = el("input", {
+    type: "text",
+    placeholder: "PHYS 211",
+    "aria-label": "Course for rows without one",
+  });
+  input.value = state.bulkCourse;
+  input.addEventListener("input", () => {
+    state.bulkCourse = input.value;
+  });
+  return el(
+    "div",
+    { class: "bulk-course" },
+    el("span", { class: "muted" }, "Course for rows without one:"),
+    input,
+    button("Apply", () => {
+      const course = state.bulkCourse.trim();
+      if (!course) return;
+      for (const draft of drafts) {
+        if (!draft.course.trim()) draft.course = course;
+      }
+      render();
+    }),
+  );
+}
+
+function keepBox(draft: Draft, label: string) {
+  const keep = el("input", { type: "checkbox", "aria-label": label });
   keep.checked = draft.include;
   keep.addEventListener("change", () => {
     draft.include = keep.checked;
     render();
   });
+  return keep;
+}
 
+function matchLabel(draft: Draft): HTMLElement | null {
   const match = draft.match;
-  const matchText =
-    match.kind === "new"
-      ? "New"
-      : match.kind === "same"
-        ? match.changes.join(" · ") || "Already saved"
-        : null;
+  if (match.kind === "ask") return null;
+  const changed = match.kind === "same" && match.changes.length > 0;
+  return el(
+    "span",
+    { class: `match${changed ? " changed" : ""}` },
+    match.kind === "new" ? "New" : match.changes.join(" · ") || "Already saved",
+  );
+}
 
+/** A row's one-line summary; opening it shows the full editor. */
+function renderCompactDraft(draft: Draft, index: number): HTMLElement {
+  const due = draft.dueAt
+    ? new Date(draft.dueAt).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "no date";
+  const details = el(
+    "details",
+    {},
+    el(
+      "summary",
+      {},
+      el("span", { class: "compact-name" }, draft.name),
+      el(
+        "span",
+        { class: "muted" },
+        ` · ${draft.course || "no course"} · ${due} · ${STATUS_LABELS[draft.status]} `,
+      ),
+      matchLabel(draft),
+    ),
+    renderFields(draft),
+  );
+  details.open = state.openRows.has(index);
+  details.addEventListener("toggle", () => {
+    if (details.open) state.openRows.add(index);
+    else state.openRows.delete(index);
+  });
+  return el(
+    "div",
+    { class: `review-row compact${draft.include ? "" : " left-out"}` },
+    keepBox(draft, `Keep ${draft.name}`),
+    details,
+  );
+}
+
+function renderDraft(draft: Draft, index: number): HTMLElement {
+  return el(
+    "div",
+    { class: `review-row${draft.include ? "" : " left-out"}` },
+    el(
+      "div",
+      { class: "top" },
+      el("label", {}, keepBox(draft, `Keep ${draft.name}`), " Keep"),
+      draft.flag && tag(draft.flag),
+      matchLabel(draft),
+    ),
+    draft.match.kind === "ask" &&
+      renderAsk(draft, draft.match.savedName, index),
+    renderFields(draft),
+  );
+}
+
+function renderFields(draft: Draft): HTMLElement {
   const textField = (
     label: string,
     value: string,
@@ -1063,30 +1271,11 @@ function renderDraft(draft: Draft, index: number): HTMLElement {
 
   return el(
     "div",
-    { class: `review-row${draft.include ? "" : " left-out"}` },
-    el(
-      "div",
-      { class: "top" },
-      el("label", {}, keep, " Keep"),
-      draft.flag && tag(draft.flag),
-      matchText &&
-        el(
-          "span",
-          {
-            class: `match${match.kind === "same" && match.changes.length ? " changed" : ""}`,
-          },
-          matchText,
-        ),
-    ),
-    match.kind === "ask" && renderAsk(draft, match.savedName, index),
-    el(
-      "div",
-      { class: "fields" },
-      textField("Name", draft.name, (v) => (draft.name = v)),
-      textField("Course", draft.course, (v) => (draft.course = v)),
-      el("label", {}, "Due", due),
-      el("label", {}, "Status", status),
-    ),
+    { class: "fields" },
+    textField("Name", draft.name, (v) => (draft.name = v)),
+    textField("Course", draft.course, (v) => (draft.course = v)),
+    el("label", {}, "Due", due),
+    el("label", {}, "Status", status),
   );
 }
 
