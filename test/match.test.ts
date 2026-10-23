@@ -34,6 +34,8 @@ const saved = (overrides: Partial<SavedAssignment>): SavedAssignment => ({
   status: "open",
   aliases: [],
   ignored: false,
+  estimateMinutes: null,
+  sessions: [],
   ...overrides,
 });
 

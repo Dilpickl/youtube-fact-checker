@@ -15,7 +15,11 @@ const reviewRow: ReviewRow = {
   match: { kind: "new" },
 };
 
-const server = createApp(openStore(":memory:"), async () => [reviewRow]);
+const server = createApp(openStore(":memory:"), {
+  review: async () => [reviewRow],
+  estimate: async (assignments) =>
+    new Map(assignments.map((assignment) => [assignment.id, 25])),
+});
 let base = "";
 
 before(async () => {
@@ -37,7 +41,7 @@ test("serves the website", async () => {
   assert.match(await response.text(), /<title>Schoolwork assistant<\/title>/);
 });
 
-test("import, save, mark done, and undo work end to end", async () => {
+test("import, save, estimate, log work, mark done, and undo work end to end", async () => {
   const imported = await post("/api/import", "fake image", "image/png");
   const { rows } = (await imported.json()) as { rows: ReviewRow[] };
   assert.equal(rows[0].name, "Cultura (Interpretiamo)- 5");
@@ -58,6 +62,27 @@ test("import, save, mark done, and undo work end to end", async () => {
     );
     return ((await response.json()) as SavedAssignment[])[0].status;
   };
+  const estimated = await post("/api/estimates", "");
+  const [withEstimate] = (await estimated.json()) as SavedAssignment[];
+  assert.equal(withEstimate.estimateMinutes, 25);
+
+  const worked = await post(
+    `/api/assignments/${assignment.id}/work`,
+    JSON.stringify({ minutes: 25, finished: false }),
+  );
+  const { sessionId, assignments } = (await worked.json()) as {
+    sessionId: number;
+    assignments: SavedAssignment[];
+  };
+  assert.equal(assignments[0].sessions[0].minutes, 25);
+  const undone = await fetch(`${base}/api/work/${sessionId}`, {
+    method: "DELETE",
+  });
+  assert.deepEqual(
+    ((await undone.json()) as SavedAssignment[])[0].sessions,
+    [],
+  );
+
   assert.equal(await setStatus("closed"), "closed", "mark done");
   assert.equal(await setStatus("open"), "open", "undo");
 });

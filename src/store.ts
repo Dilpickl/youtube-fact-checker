@@ -1,7 +1,12 @@
 // Saved assignments, in a SQLite file using Node's built-in driver. One file
 // on the server, so the website and (later) the Discord bot share it.
 import { DatabaseSync } from "node:sqlite";
-import type { SaveRow, SavedAssignment, Status } from "./assignment.ts";
+import type {
+  SaveRow,
+  SavedAssignment,
+  Status,
+  WorkSession,
+} from "./assignment.ts";
 import { normalizeName } from "./match.ts";
 
 interface AssignmentRecord {
@@ -12,9 +17,13 @@ interface AssignmentRecord {
   status: string;
   aliases: string;
   ignored: number;
+  estimate_minutes: number | null;
 }
 
-const toAssignment = (record: AssignmentRecord): SavedAssignment => ({
+const toAssignment = (
+  record: AssignmentRecord,
+  sessions: WorkSession[] = [],
+): SavedAssignment => ({
   id: record.id,
   name: record.name,
   course: record.course,
@@ -22,6 +31,8 @@ const toAssignment = (record: AssignmentRecord): SavedAssignment => ({
   status: record.status as Status,
   aliases: JSON.parse(record.aliases) as string[],
   ignored: record.ignored === 1,
+  estimateMinutes: record.estimate_minutes,
+  sessions,
 });
 
 export function openStore(path: string) {
@@ -33,7 +44,21 @@ export function openStore(path: string) {
     due_at TEXT,
     status TEXT NOT NULL,
     aliases TEXT NOT NULL DEFAULT '[]',
-    ignored INTEGER NOT NULL DEFAULT 0
+    ignored INTEGER NOT NULL DEFAULT 0,
+    estimate_minutes INTEGER
+  )`);
+  // Databases made before estimates existed get the column added.
+  const columns = db.prepare("PRAGMA table_info(assignments)").all() as {
+    name: string;
+  }[];
+  if (!columns.some((column) => column.name === "estimate_minutes")) {
+    db.exec("ALTER TABLE assignments ADD COLUMN estimate_minutes INTEGER");
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS work_log (
+    id INTEGER PRIMARY KEY,
+    assignment_id INTEGER NOT NULL REFERENCES assignments(id),
+    minutes INTEGER NOT NULL,
+    logged_at TEXT NOT NULL
   )`);
   const find = (id: number) => {
     const record = db
@@ -44,10 +69,28 @@ export function openStore(path: string) {
 
   return {
     list(): SavedAssignment[] {
+      const sessions = new Map<number, WorkSession[]>();
+      const logged = db.prepare("SELECT * FROM work_log ORDER BY id").all() as {
+        id: number;
+        assignment_id: number;
+        minutes: number;
+        logged_at: string;
+      }[];
+      for (const entry of logged) {
+        const list = sessions.get(entry.assignment_id) ?? [];
+        list.push({
+          id: entry.id,
+          minutes: entry.minutes,
+          at: entry.logged_at,
+        });
+        sessions.set(entry.assignment_id, list);
+      }
       const records = db
         .prepare("SELECT * FROM assignments ORDER BY id")
         .all() as unknown as AssignmentRecord[];
-      return records.map(toAssignment);
+      return records.map((record) =>
+        toAssignment(record, sessions.get(record.id)),
+      );
     },
 
     /** Saves reviewed rows all together, or none if any row is invalid. */
@@ -100,6 +143,31 @@ export function openStore(path: string) {
           .prepare("UPDATE assignments SET status = ? WHERE id = ?")
           .run(status, id).changes > 0
       );
+    },
+
+    /** Records a work session; returns its id, or null if no such assignment. */
+    logWork(id: number, minutes: number, at = new Date()): number | null {
+      if (!find(id)) return null;
+      const result = db
+        .prepare(
+          "INSERT INTO work_log (assignment_id, minutes, logged_at) VALUES (?, ?, ?)",
+        )
+        .run(id, minutes, at.toISOString());
+      return Number(result.lastInsertRowid);
+    },
+
+    deleteWork(sessionId: number): boolean {
+      return (
+        db.prepare("DELETE FROM work_log WHERE id = ?").run(sessionId).changes >
+        0
+      );
+    },
+
+    setEstimates(estimates: Map<number, number>): void {
+      const update = db.prepare(
+        "UPDATE assignments SET estimate_minutes = ? WHERE id = ?",
+      );
+      for (const [id, minutes] of estimates) update.run(minutes, id);
     },
 
     close(): void {

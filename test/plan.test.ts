@@ -19,6 +19,8 @@ const due = (
   status,
   aliases: [],
   ignored,
+  estimateMinutes: null,
+  sessions: [],
 });
 
 test("lays assignments out by day, with done and undated work apart", () => {

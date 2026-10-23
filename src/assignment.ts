@@ -15,6 +15,17 @@ export interface SavedAssignment {
   aliases: string[];
   /** Left out by the student (e.g. a grade total); later imports skip it. */
   ignored: boolean;
+  /** TypeSafe's estimate of the work, or null until it has been judged. */
+  estimateMinutes: number | null;
+  /** Work sessions done on it, oldest first. */
+  sessions: WorkSession[];
+}
+
+export interface WorkSession {
+  id: number;
+  minutes: number;
+  /** When it was logged, ISO 8601. */
+  at: string;
 }
 
 /** How an imported row relates to what's already saved. */

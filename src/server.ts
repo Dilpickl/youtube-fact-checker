@@ -1,5 +1,6 @@
 // The website's server: the pages, plus a small JSON API for importing
-// screenshots, saving reviewed rows, and changing an assignment's status.
+// screenshots, saving reviewed rows, estimating work, logging work sessions,
+// and changing an assignment's status.
 // Start it with `npm start`, which restarts it when code changes.
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -11,6 +12,7 @@ import {
 import { dirname } from "node:path";
 import { z } from "zod";
 import { STATUSES, type ReviewRow } from "./assignment.ts";
+import { typeSafeEstimateMinutes, type EstimateMinutes } from "./estimate.ts";
 import { importScreenshot } from "./import-screenshot.ts";
 import {
   reviewImport,
@@ -46,6 +48,16 @@ const SaveRequest = z.object({
 
 const StatusRequest = z.object({ status: z.enum(STATUSES) });
 
+const WorkRequest = z.object({
+  minutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60),
+  /** True when this session finished the whole assignment. */
+  finished: z.boolean(),
+});
+
 /** Reads a screenshot into rows to review; tests swap in a fake. */
 export type ReviewScreenshot = (
   bytes: Uint8Array,
@@ -66,14 +78,24 @@ class HttpError extends Error {
   }
 }
 
-export function createApp(
-  store: Store,
-  review: ReviewScreenshot = reviewScreenshot,
-  pageScript = "",
-) {
+/** What the server calls out to; tests swap in fakes. */
+export interface Services {
+  review: ReviewScreenshot;
+  estimate: EstimateMinutes;
+  /** The page's bundled script, built at startup. */
+  pageScript: string;
+}
+
+export function createApp(store: Store, overrides: Partial<Services> = {}) {
+  const services: Services = {
+    review: reviewScreenshot,
+    estimate: typeSafeEstimateMinutes,
+    pageScript: "",
+    ...overrides,
+  };
   return createServer(async (request, response) => {
     try {
-      await route(request, response, store, review, pageScript);
+      await route(request, response, store, services);
     } catch (error) {
       if (error instanceof HttpError) {
         sendJson(response, error.status, { error: error.message });
@@ -91,8 +113,7 @@ async function route(
   request: IncomingMessage,
   response: ServerResponse,
   store: Store,
-  review: ReviewScreenshot,
-  pageScript: string,
+  { review, estimate, pageScript }: Services,
 ): Promise<void> {
   const path = new URL(request.url ?? "/", "http://localhost").pathname;
   const page = PAGES[path];
@@ -107,6 +128,23 @@ async function route(
     });
     response.end(pageScript);
   } else if (request.method === "GET" && path === "/api/assignments") {
+    sendJson(response, 200, store.list());
+  } else if (request.method === "POST" && path === "/api/estimates") {
+    // Estimates each task that can still be worked on and has none yet.
+    const missing = store
+      .list()
+      .filter(
+        (assignment) =>
+          assignment.estimateMinutes === null &&
+          !assignment.ignored &&
+          assignment.status !== "closed",
+      );
+    try {
+      store.setEstimates(await estimate(missing));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new HttpError(502, `Couldn't estimate your tasks: ${reason}`);
+    }
     sendJson(response, 200, store.list());
   } else if (request.method === "POST" && path === "/api/import") {
     const bytes = await readBody(request);
@@ -137,6 +175,24 @@ async function route(
     if (!parsed.success) throw new HttpError(400, "That isn't a status.");
     if (!store.setStatus(id, parsed.data.status)) {
       throw new HttpError(404, "That assignment doesn't exist anymore.");
+    }
+    sendJson(response, 200, store.list());
+  } else if (
+    request.method === "POST" &&
+    /^\/api\/assignments\/\d+\/work$/.test(path)
+  ) {
+    const id = Number(path.split("/")[3]);
+    const parsed = WorkRequest.safeParse(await readJson(request));
+    if (!parsed.success) throw new HttpError(400, "That isn't a work session.");
+    const sessionId = store.logWork(id, parsed.data.minutes);
+    if (sessionId === null) {
+      throw new HttpError(404, "That assignment doesn't exist anymore.");
+    }
+    if (parsed.data.finished) store.setStatus(id, "closed");
+    sendJson(response, 200, { sessionId, assignments: store.list() });
+  } else if (request.method === "DELETE" && /^\/api\/work\/\d+$/.test(path)) {
+    if (!store.deleteWork(Number(path.split("/")[3]))) {
+      throw new HttpError(404, "That session was already removed.");
     }
     sendJson(response, 200, store.list());
   } else {
@@ -191,11 +247,7 @@ if (import.meta.main) {
   mkdirSync(dirname(databasePath), { recursive: true });
   const port = Number(process.env.PORT ?? 3000);
   const pageScript = outputFiles[0].text;
-  const server = createApp(
-    openStore(databasePath),
-    reviewScreenshot,
-    pageScript,
-  );
+  const server = createApp(openStore(databasePath), { pageScript });
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code !== "EADDRINUSE") throw error;
     console.error(

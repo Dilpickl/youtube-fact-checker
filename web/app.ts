@@ -1,5 +1,5 @@
-// The website: a Now page (picking the next task arrives in milestone 3) and
-// a Plan page that lays everything out by day and imports screenshots.
+// The website: a Now page that shows the one task to do next, and a Plan page
+// that lays everything out by day and imports screenshots.
 import {
   STATUS_LABELS,
   STATUSES,
@@ -8,6 +8,14 @@ import {
   type SavedAssignment,
   type Status,
 } from "../src/assignment.ts";
+import {
+  buildSchedule,
+  describeDay,
+  describePace,
+  describeWhen,
+  smallerItem,
+  type WorkItem,
+} from "../src/now.ts";
 import { buildPlan } from "../src/plan.ts";
 
 interface Notice {
@@ -29,6 +37,12 @@ const state = {
   drafts: null as Draft[] | null,
   reviewError: null as string | null,
   notice: null as Notice | null,
+  estimating: false,
+  estimateError: null as string | null,
+  /** Tasks passed over with "Not now" this visit. */
+  skipped: new Set<number>(),
+  /** A task chosen by "Too tired?" instead of the next in order. */
+  tiredPick: null as number | null,
 };
 
 const app = document.querySelector<HTMLElement>("#app")!;
@@ -64,7 +78,16 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, init);
   } catch {
-    throw new Error("Couldn't reach the server. Check that it's running.");
+    // The server restarts itself after code changes (about 2 seconds), so
+    // wait out a restart once before giving up.
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    try {
+      response = await fetch(path, init);
+    } catch {
+      throw new Error(
+        "Couldn't reach the server. Check that npm start is still running, then try again.",
+      );
+    }
   }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -114,6 +137,28 @@ async function loadAssignments() {
     state.loadFailed = true;
   }
   render();
+  void ensureEstimates();
+}
+
+/** Asks the server to estimate any task that can be worked on and has none. */
+async function ensureEstimates() {
+  const missing = state.assignments?.some(
+    (a) => a.estimateMinutes === null && !a.ignored && a.status !== "closed",
+  );
+  if (!missing || state.estimating) return;
+  state.estimating = true;
+  state.estimateError = null;
+  render();
+  try {
+    state.assignments = await api<SavedAssignment[]>("/api/estimates", {
+      method: "POST",
+    });
+  } catch (error) {
+    state.estimateError = messageOf(error);
+  } finally {
+    state.estimating = false;
+    render();
+  }
 }
 
 async function importFile(file: File) {
@@ -201,6 +246,7 @@ async function saveDrafts() {
       text: `Saved ${kept.length} assignment${kept.length === 1 ? "" : "s"}.`,
       kind: "good",
     };
+    void ensureEstimates();
   } catch (error) {
     state.reviewError = messageOf(error);
   } finally {
@@ -244,25 +290,231 @@ const markDone = (assignment: SavedAssignment) =>
       void setStatus(assignment, assignment.status, backOnPlan(assignment)),
   });
 
+/** Records a work session; finishing it also marks the assignment done. */
+async function logWork(item: WorkItem, minutes: number, finished: boolean) {
+  const { assignment } = item;
+  try {
+    const result = await api<{
+      sessionId: number;
+      assignments: SavedAssignment[];
+    }>(`/api/assignments/${assignment.id}/work`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ minutes, finished }),
+    });
+    state.assignments = result.assignments;
+    state.tiredPick = null;
+    state.notice = {
+      text: finished
+        ? `Finished "${assignment.name}".`
+        : `Logged ${minutes} min on "${assignment.name}".`,
+      kind: "good",
+      undo: () => void undoWork(result.sessionId, finished ? assignment : null),
+    };
+  } catch (error) {
+    state.notice = { text: messageOf(error), kind: "error" };
+  }
+  render();
+}
+
+/** Removes a logged session, and reopens the assignment if it finished it. */
+async function undoWork(sessionId: number, finished: SavedAssignment | null) {
+  try {
+    state.assignments = await api<SavedAssignment[]>(`/api/work/${sessionId}`, {
+      method: "DELETE",
+    });
+    if (finished) {
+      return await setStatus(finished, finished.status, backOnPlan(finished));
+    }
+    state.notice = { text: "Session removed.", kind: "good" };
+  } catch (error) {
+    state.notice = { text: messageOf(error), kind: "error" };
+  }
+  render();
+}
+
 const reopen = (assignment: SavedAssignment) =>
   setStatus(assignment, "open", backOnPlan(assignment));
 
 // ---- Pages ----
 
 function renderNow(): Node[] {
-  return [
+  const page = (...nodes: Child[]): Node[] =>
+    [...nodes, state.notice && renderNotice(state.notice)].filter(
+      (node): node is HTMLElement => Boolean(node),
+    );
+  const card = (...children: Child[]) =>
+    el("div", { class: "card now-card" }, ...children);
+
+  if (state.loadFailed) return renderSchedule();
+  if (!state.assignments || state.estimating) {
+    return page(
+      card(
+        el(
+          "p",
+          { class: "muted", role: "status" },
+          state.estimating
+            ? "Working out how long each task takes…"
+            : "Loading…",
+        ),
+      ),
+    );
+  }
+
+  const now = new Date();
+  const schedule = buildSchedule(state.assignments, now);
+  const pace = describePace(schedule.pace);
+  const paceLine =
+    pace &&
     el(
-      "div",
-      { class: "card" },
-      el("h1", {}, "What now?"),
+      "p",
+      { class: "muted pace" },
+      schedule.doneToday > 0
+        ? `${pace} You've done ${schedule.doneToday} min today.`
+        : pace,
+    );
+
+  if (schedule.items.length === 0) {
+    const hasAny = state.assignments.some((a) => !a.ignored);
+    return page(
+      card(
+        el("h1", {}, hasAny ? "Nothing to do right now" : "Nothing saved yet"),
+        el(
+          "p",
+          { class: "muted" },
+          hasAny
+            ? "Everything you can work on is done. New work shows up here once you add it on your Plan."
+            : "Add a screenshot of an assignments page on your Plan, and this page will lay out what to do in order.",
+        ),
+        el("a", { class: "button", href: "#plan" }, "Open your Plan"),
+      ),
+    );
+  }
+
+  const queue = schedule.items.filter(
+    (item) => !state.skipped.has(item.assignment.id),
+  );
+  const tiredItem = schedule.items.find(
+    (item) => item.assignment.id === state.tiredPick,
+  );
+  const current = tiredItem ?? queue[0];
+  if (!current) {
+    return page(
+      card(
+        el("h1", {}, "That's everything for now"),
+        el(
+          "p",
+          { class: "muted" },
+          `You passed on all ${schedule.items.length} tasks. Start over to see them in order again.`,
+        ),
+        button(
+          "Start over",
+          () => {
+            state.skipped.clear();
+            render();
+          },
+          "primary",
+        ),
+      ),
+      paceLine,
+    );
+  }
+
+  const shareDone = !schedule.items.some((item) => item.tier !== "ahead");
+  const eyebrows = {
+    "due-soon": "Due soon",
+    today: "Today's share",
+    ahead: "Getting ahead",
+  };
+  const reasons = {
+    "due-soon": "It's due soon, so it comes before everything else.",
+    today: "It's part of today's share of your upcoming work.",
+    ahead: `Starting early: the plan has it for ${describeDay(current.plannedStart, now)}.`,
+  };
+  const partial = current.minutes < current.remaining;
+  const { assignment } = current;
+  const sameDay =
+    current.plannedStart.getTime() === current.plannedFinish.getTime();
+  const planned =
+    current.tier === "due-soon"
+      ? null
+      : sameDay
+        ? `Planned for ${describeDay(current.plannedStart, now)}`
+        : `Planned ${describeDay(current.plannedStart, now)} through ${describeDay(current.plannedFinish, now)}`;
+
+  return page(
+    shareDone &&
       el(
         "p",
-        { class: "muted" },
-        "Soon this page will pick the one thing to do next, with a reason and a time to start. Until then, your Plan shows everything that's due.",
+        { class: "notice good" },
+        "Today's share is done and everything is on track. You can stop here, or keep going to get ahead.",
       ),
-      el("a", { class: "button primary", href: "#plan" }, "Open your Plan"),
+    card(
+      el(
+        "p",
+        { class: "eyebrow" },
+        tiredItem ? "Something smaller" : eyebrows[current.tier],
+      ),
+      el("h1", {}, assignment.name),
+      el("p", { class: "muted" }, assignment.course || "No course"),
+      el("p", {}, `Due ${describeWhen(new Date(assignment.dueAt!), now)}`),
+      el(
+        "p",
+        { class: "start-by" },
+        partial
+          ? `This session: about ${current.minutes} min (${current.remaining} min left in all)`
+          : `About ${current.minutes} min`,
+      ),
+      planned && el("p", { class: "muted" }, planned),
+      el(
+        "p",
+        {},
+        tiredItem
+          ? "It's the shortest session on your list."
+          : reasons[current.tier],
+      ),
+      state.estimateError &&
+        el(
+          "p",
+          { class: "error-text" },
+          `Couldn't estimate times (${state.estimateError}). Using 30 minutes per task for now.`,
+        ),
+      el(
+        "div",
+        { class: "actions" },
+        button(
+          partial ? "Done with this session" : "Done",
+          () => void logWork(current, current.minutes, !partial),
+          "primary",
+        ),
+        partial &&
+          button(
+            "Finished it all",
+            () => void logWork(current, current.remaining, true),
+          ),
+        button("Not now", () => {
+          state.skipped.add(assignment.id);
+          state.tiredPick = null;
+          state.notice = null;
+          render();
+        }),
+        button("Too tired?", () => {
+          const smaller = smallerItem(queue, current);
+          if (smaller) {
+            state.tiredPick = smaller.assignment.id;
+            state.notice = null;
+          } else {
+            state.notice = {
+              text: "This is already the shortest session on your list. Take a 10-minute break, then come back to it.",
+              kind: "good",
+            };
+          }
+          render();
+        }),
+      ),
     ),
-  ];
+    paceLine,
+  );
 }
 
 function renderPlan(): Node[] {

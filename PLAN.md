@@ -41,25 +41,35 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
   has Undo and Reopen. Dylan tried their own Canvas and PHYS 110 screenshots,
   the 11:59 PM times, and Undo. Re-importing and the "Same assignment?"
   question were checked by Claude through the server, not yet by Dylan.
+- 2026-10-22: Milestone 3, "What now?". The Now page shows the work in the
+  order to do it: due soon, then today's share, then getting ahead. Big tasks
+  are split into sessions; TypeSafe estimates each task's time once. Done /
+  Done with this session / Finished it all log work (with Undo); Not now and
+  Too tired? change the pick. Dylan checked that the order matches what they'd
+  expect; more real use will test the logic.
 
 ## Next
 
-1. **Milestone 3, "What now?"** on the Now page: one task, a one-line reason,
-   a start-by time, and "Not now" / "Too tired?". Done when Dylan opens Now
-   and sees a task (e.g. Discussione 4) with a start-by time Dylan agrees with,
-   "Too tired?" gives something smaller, and "Not now" gives the next one.
-2. Class schedule and time available ("40 minutes before ITAL 101"); also
-   feeds the Today itinerary and the debriefs.
-3. Focus timer: start, done, next up; records time actually spent.
-4. Learning: compare timer data with estimates, adjust per course; learn which
-   hours Dylan focuses best (this replaces asking for energy).
-5. Discord bot: add tasks by message or photo, "what now?", morning debrief
+1. **History page:** finished assignments and logged sessions by day, newest
+   first, with totals, Reopen (restores the status it had before), and Remove.
+2. **Canvas calendar feed:** paste the feed link once; new Canvas assignments
+   arrive for review without screenshots. (No submission status in the feed;
+   a Canvas access token could add it if Illinois allows student tokens.)
+3. **Paste text or a link** as another way to import, beside screenshots;
+   text works on pages behind a login (Gradescope, PrairieLearn, Connect).
+4. Class schedule and time available; also feeds the Today itinerary and the
+   debriefs.
+5. Focus timer: records real time spent (sessions currently log the planned
+   minutes).
+6. Learning: compare real times with estimates, adjust per course; learn which
+   hours Dylan focuses best; tune session sizes.
+7. Discord bot: add tasks by message or photo, "what now?", morning debrief
    (due today, keeping up, first class, weather).
-6. Evening "prep for tomorrow" debrief.
-7. Canvas calendar feed import.
-8. Exams: split into study sessions spread over the days before.
-9. Travel time to first class (needs a maps API).
-10. Shelved for now: a character for the assistant (pickle, owl, or cat
+8. Evening "prep for tomorrow" debrief.
+9. Exams: dated exams become study sessions (the scheduler already splits big
+   tasks); "tests the next day take precedence."
+10. Travel time to first class (needs a maps API).
+11. Shelved for now: a character for the assistant (pickle, owl, or cat
     concepts were shown 2026-10-21).
 
 **Reminder for Claude:** once import works, build a test set of real
@@ -102,6 +112,17 @@ numbers are the resume evidence Dylan wants.
 - **2026-10-20 — Ambitious scope on purpose.** Dylan wants everything from the
   website to the bot and isn't worried about the 24-hour budget. Build in the
   order under Next so each step is usable on its own.
+- **2026-10-22 — A workload-driven plan, no daily budget.** Dylan rejected
+  "start by" times right before the deadline ("a smart planner would plan
+  ahead") and a daily time budget. Their workflow: everything goes in the app,
+  Dylan works through it in order until stopping, things due soon (and tests the
+  next day) come first, and the rest is spread over the days before it's due.
+  The pace comes from the workload (for each deadline, work due by then over
+  days left, finishing a day early, two for big tasks); sessions are 25-60
+  min; an hour or less is done in one sitting.
+- **2026-10-22 — Direct imports.** Canvas has a calendar feed; Gradescope,
+  PrairieLearn, and Connect need a login, so they stay screenshots or pasted
+  text. Public course sites can be imported by link.
 - **2026-10-22 — No energy picker; "Too tired?" instead.** Claude suggested
   asking for energy before each pick; Dylan asked whether that's really worth
   it. Agreed: asking every time adds friction and self-reports are unreliable.

@@ -198,6 +198,32 @@ button:disabled {
   border-radius: 12px;
 }
 
+/* Now */
+.now-card h1 {
+  font-size: 1.8rem;
+  line-height: 1.25;
+}
+
+.now-card p {
+  margin: 8px 0;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.start-by {
+  font-weight: 600;
+}
+
+.start-by.late {
+  color: var(--danger);
+}
+
 /* Review */
 .review {
   margin-top: 16px;
