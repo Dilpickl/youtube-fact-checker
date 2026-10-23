@@ -2,7 +2,8 @@
 // assignment is never saved twice. Code finds the candidates (same name, or
 // same course with a due date within a day); TypeSafe judges the candidates
 // whose names differ, like "Connect: Lessico 6" on Canvas and "Lessico- 6".
-import { noul, TypeSafeClient } from "@typesafe-ai/sdk";
+// Rows whose screenshot didn't show a course get one inferred first.
+import { choice, noul, TypeSafeClient } from "@typesafe-ai/sdk";
 import {
   shortDate,
   STATUS_LABELS,
@@ -38,20 +39,40 @@ export interface CandidatePair {
 /** Probability, for each pair, that both rows are the same assignment. */
 export type JudgeSame = (pairs: CandidatePair[]) => Promise<number[]>;
 
-export async function reviewImport(
-  rows: CheckedAssignment[],
-  saved: SavedAssignment[],
-  judgeSame: JudgeSame,
-): Promise<ReviewRow[]> {
-  const exact = rows.map((row) =>
-    saved.find(
-      (candidate) =>
-        coursesFit(row.course, candidate.course) &&
-        [candidate.name, ...candidate.aliases].some(
-          (name) => normalizeName(name) === normalizeName(row.name),
-        ),
-    ),
+/** A saved course, with a few assignment names that show what it covers. */
+export interface CourseExamples {
+  course: string;
+  examples: string[];
+}
+
+/** For each row, the saved course it's for, or null when unsure. */
+export type GuessCourse = (
+  rows: { name: string; dueAt: string | null }[],
+  courses: CourseExamples[],
+) => Promise<(string | null)[]>;
+
+/** The TypeSafe judgments matching needs; tests swap in fakes. */
+export interface Judges {
+  same: JudgeSame;
+  course: GuessCourse;
+}
+
+const findExact = (row: CheckedAssignment, saved: SavedAssignment[]) =>
+  saved.find(
+    (candidate) =>
+      coursesFit(row.course, candidate.course) &&
+      [candidate.name, ...candidate.aliases].some(
+        (name) => normalizeName(name) === normalizeName(row.name),
+      ),
   );
+
+export async function reviewImport(
+  imported: CheckedAssignment[],
+  saved: SavedAssignment[],
+  judges: Judges,
+): Promise<ReviewRow[]> {
+  const rows = await fillCourses(imported, saved, judges.course);
+  const exact = rows.map((row) => findExact(row, saved));
 
   const pairs: (CandidatePair & { row: number })[] = [];
   rows.forEach((row, index) => {
@@ -65,7 +86,7 @@ export async function reviewImport(
       }
     }
   });
-  const probabilities = pairs.length > 0 ? await judgeSame(pairs) : [];
+  const probabilities = pairs.length > 0 ? await judges.same(pairs) : [];
 
   return rows.map((row, index) => {
     let target = exact[index];
@@ -98,6 +119,55 @@ export async function reviewImport(
       match,
     };
   });
+}
+
+/**
+ * Fills in courses the screenshot didn't show. A page usually belongs to one
+ * course, so if every row that shows a course shows the same one, the rest get
+ * it too. Otherwise TypeSafe picks among the courses already saved, which also
+ * keeps one course from being saved under two names.
+ */
+async function fillCourses(
+  rows: CheckedAssignment[],
+  saved: SavedAssignment[],
+  guessCourse: GuessCourse,
+): Promise<CheckedAssignment[]> {
+  const shown = new Set(rows.map((row) => row.course).filter(Boolean));
+  if (shown.size === 1) {
+    const [course] = shown;
+    return rows.map((row) => ({ ...row, course: row.course || course }));
+  }
+  // Rows that match a saved assignment by name take its course later anyway.
+  const blanks = rows.flatMap((row, index) =>
+    !row.course && !findExact(row, saved) ? [index] : [],
+  );
+  const courses = courseExamples(saved);
+  if (blanks.length === 0 || courses.length === 0) return rows;
+  const guesses = await guessCourse(
+    blanks.map((index) => rows[index]),
+    courses,
+  );
+  const filled = [...rows];
+  blanks.forEach((index, k) => {
+    filled[index] = { ...rows[index], course: guesses[k] ?? "" };
+  });
+  return filled;
+}
+
+/** Each saved course once, with up to three of its assignment names. */
+export function courseExamples(saved: SavedAssignment[]): CourseExamples[] {
+  const courses = new Map<string, CourseExamples>();
+  for (const assignment of saved) {
+    if (!assignment.course || assignment.ignored) continue;
+    const key = normalizeName(assignment.course);
+    const entry = courses.get(key) ?? {
+      course: assignment.course,
+      examples: [],
+    };
+    if (entry.examples.length < 3) entry.examples.push(assignment.name);
+    courses.set(key, entry);
+  }
+  return [...courses.values()];
 }
 
 /** What this import would change about a saved assignment, in words. */
@@ -149,4 +219,39 @@ export const typeSafeJudgeSame: JudgeSame = async (pairs) => {
     ),
   });
   return pairs.map((_, k) => answers[`same${k}`].noul);
+};
+
+/** The real course guesser: one TypeSafe multiple-choice question per row. */
+export const typeSafeGuessCourse: GuessCourse = async (rows, courses) => {
+  const client = new TypeSafeClient();
+  const criteria: Record<string, string> = Object.fromEntries(
+    courses.map((entry, k) => [
+      `c${k}`,
+      `${entry.course}, which has assignments like ${entry.examples.map((name) => `"${name}"`).join(", ")}`,
+    ]),
+  );
+  criteria.other = "A different course that isn't listed here.";
+  const { answers } = await client.systemOne({
+    state: {
+      assignments: rows.map((row) => ({
+        name: row.name,
+        due: row.dueAt ?? "not shown",
+      })),
+    },
+    questions: Object.fromEntries(
+      rows.map((_, k) => [
+        `course${k}`,
+        choice(
+          `Which of the student's courses is \`assignments[${k}]\` for?`,
+          criteria,
+        ),
+      ]),
+    ),
+  });
+  return rows.map((_, k) => {
+    const answer = answers[`course${k}`];
+    const probability = answer.probabilities[answer.choice] ?? 0;
+    if (answer.choice === "other" || probability < CONFIDENT) return null;
+    return courses[Number(answer.choice.slice(1))].course;
+  });
 };

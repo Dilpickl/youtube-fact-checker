@@ -11,6 +11,9 @@ import { STATUSES, type Status } from "./assignment.ts";
 
 const EXTRACT_MODEL = "claude-haiku-5-5";
 const MAX_IMAGE_SIDE = 1568;
+// ponytail: one time zone for every page, the student's; a page showing times
+// in another zone would be read as local. Add per-page zones if that happens.
+const TIME_ZONE = process.env.TIME_ZONE ?? "America/Chicago";
 // ponytail: one fixed cutoff for "confident"; tune it once there's a test set
 // of real screenshots with known answers.
 export const CONFIDENT = 0.7;
@@ -105,7 +108,35 @@ export function resolveRow(
   return { status, include: true, flag };
 }
 
-/** "2026-10-20T23:59:00-05:00" → "Oct 20, 2026 at 11:59 PM", as the page showed it. */
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * "2026-11-13T23:59" in America/Chicago → "2026-11-13T23:59:00-06:00": the
+ * offset in effect on that date, so daylight saving time is handled.
+ */
+export function wallClockToIso(wallClock: string, timeZone: string): string {
+  const offsetAt = (instant: number) => {
+    const name =
+      new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+        .formatToParts(instant)
+        .find((part) => part.type === "timeZoneName")?.value ?? "";
+    const match = /GMT([+-])(\d{2}):(\d{2})/.exec(name);
+    if (!match) return 0; // "GMT" alone means no offset
+    const minutes = Number(match[2]) * 60 + Number(match[3]);
+    return match[1] === "-" ? -minutes : minutes;
+  };
+  const asUtc = Date.parse(`${wallClock}:00Z`);
+  // The offset depends on the instant and the instant on the offset; one
+  // correction settles it.
+  const offset = offsetAt(asUtc - offsetAt(asUtc) * 60_000);
+  const abs = Math.abs(offset);
+  return `${wallClock}:00${offset < 0 ? "-" : "+"}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+}
+
+/**
+ * "2026-10-20T23:59:00-05:00" → "due Oct 20 at 11:59 PM", as the page showed
+ * it. No year: most pages don't show one, so TypeSafe couldn't confirm it.
+ */
 export function describeDue(dueAt: string | null): string {
   if (!dueAt) return "with no due date shown";
   // Drop the offset and format as UTC so the clock time isn't shifted.
@@ -115,7 +146,6 @@ export function describeDue(dueAt: string | null): string {
     timeZone: "UTC",
     month: "short",
     day: "numeric",
-    year: "numeric",
   });
   const time = local.toLocaleTimeString("en-US", {
     timeZone: "UTC",
@@ -152,7 +182,7 @@ async function extractAssignments(
             text: `This is a screenshot of a course website. List every assignment, quiz, exam, or other task it shows.
 - name: exactly as written on the page.
 - course: the course code if the page shows one anywhere, including in a link or breadcrumb (for example "ITAL 101"), otherwise "".
-- dueAt: the due date and time in ISO 8601 with the time zone offset, for example "2026-10-20T23:59:00-05:00". Use the offset of any time zone the page names (CDT is -05:00). If no year is shown, use the next such date on or after ${today.toDateString()}. If there's no due date, null. Use the due date, never a start or available date.
+- dueAt: the due date and time exactly as the page shows them, written as YYYY-MM-DDTHH:MM in 24-hour time with no time zone, for example "2026-11-13T23:59". If no year is shown, use the next such date on or after ${today.toDateString()}. If there's no due date, null. Use the due date, never a start or available date.
 - status: "not_open_yet" if the page says it isn't available yet (for example "Not available until Oct 26"); "closed" if it's locked, submitted, completed, or past due; "open" if it can be worked on now; "unknown" if the page doesn't say.
 - kind: "grade_total" if the row is a gradebook category or running total rather than one piece of work: it typically has no due date and shows points earned out of a large total that adds up many smaller assignments. Otherwise "task".
 Include only what is visible. Don't invent tasks or dates.`,
@@ -164,11 +194,22 @@ Include only what is visible. Don't invent tasks or dates.`,
   if (response.stop_reason === "refusal" || !response.parsed_output) {
     throw new Error("Claude couldn't read assignments from that screenshot.");
   }
-  return response.parsed_output.assignments;
+  // The model copies the clock time; code adds the offset, so daylight saving
+  // time is right (the model gave November dates the October offset).
+  return response.parsed_output.assignments.map((row) => {
+    const wallClock = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.exec(
+      row.dueAt ?? "",
+    )?.[0];
+    return {
+      ...row,
+      dueAt: wallClock ? wallClockToIso(wallClock, TIME_ZONE) : null,
+    };
+  });
 }
 
 async function checkAssignments(
   bytes: Uint8Array,
+  today: Date,
   rows: Extracted[],
 ): Promise<CheckedAssignment[]> {
   if (rows.length === 0) return [];
@@ -187,7 +228,7 @@ async function checkAssignments(
       [
         `status${index}`,
         choice(
-          `In \`screenshot\`, what is the status of "${row.name}"?`,
+          `Today is \`today\`. In \`screenshot\`, what is the status of "${row.name}"?`,
           STATUS_MEANINGS,
         ),
       ],
@@ -200,7 +241,17 @@ async function checkAssignments(
     ]),
   );
   const { answers } = await client.systemOne({
-    state: { screenshot: image(bytes) },
+    // Today's date lets it tell "Available until Oct 23" from past due.
+    state: {
+      today: today.toLocaleDateString("en-US", {
+        timeZone: TIME_ZONE,
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
+      screenshot: image(bytes),
+    },
     questions,
   });
   // Mixing question types in one request loses the per-question answer type.
@@ -237,7 +288,7 @@ export async function importScreenshot(
   }
   const fitted = await fitImage(bytes);
   const rows = await extractAssignments(fitted, "png", today);
-  return checkAssignments(fitted, rows);
+  return checkAssignments(fitted, today, rows);
 }
 
 /**

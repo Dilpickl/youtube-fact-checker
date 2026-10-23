@@ -37,7 +37,7 @@ test("serves the website", async () => {
   assert.match(await response.text(), /<title>Schoolwork assistant<\/title>/);
 });
 
-test("import, save, and mark done work end to end", async () => {
+test("import, save, mark done, and undo work end to end", async () => {
   const imported = await post("/api/import", "fake image", "image/png");
   const { rows } = (await imported.json()) as { rows: ReviewRow[] };
   assert.equal(rows[0].name, "Cultura (Interpretiamo)- 5");
@@ -51,9 +51,15 @@ test("import, save, and mark done work end to end", async () => {
   const [assignment] = (await saved.json()) as SavedAssignment[];
   assert.equal(assignment.status, "open");
 
-  const done = await post(`/api/assignments/${assignment.id}/done`, "");
-  const [closed] = (await done.json()) as SavedAssignment[];
-  assert.equal(closed.status, "closed");
+  const setStatus = async (status: string) => {
+    const response = await post(
+      `/api/assignments/${assignment.id}/status`,
+      JSON.stringify({ status }),
+    );
+    return ((await response.json()) as SavedAssignment[])[0].status;
+  };
+  assert.equal(await setStatus("closed"), "closed", "mark done");
+  assert.equal(await setStatus("open"), "open", "undo");
 });
 
 test("rejects a save with a blank name and explains why", async () => {

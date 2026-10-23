@@ -8,7 +8,6 @@
 .externalNativeBuild
 .cxx
 node_modules/
-dist/
 .env
 xcuserdata/
 DerivedData/

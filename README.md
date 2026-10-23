@@ -25,8 +25,9 @@ ANTHROPIC_API_KEY=...
 npm start
 ```
 
-Then open http://localhost:3000. Saved assignments live in `data/assignments.db`
-(Git ignores it).
+Then open http://localhost:3000. The server rebuilds the page and restarts by
+itself whenever a file in `src/` or `web/` changes; refresh the browser to see
+it. Saved assignments live in `data/assignments.db` (Git ignores it).
 
 ## Import a screenshot from the command line
 

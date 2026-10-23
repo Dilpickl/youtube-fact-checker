@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "npm run build && node --env-file=.env src/server.ts",
-    "build": "esbuild web/app.ts --bundle --format=esm --target=es2022 --outfile=dist/app.js",
+    "start": "node --env-file=.env --watch-path=src --watch-path=web src/server.ts",
     "import": "node --env-file=.env src/import-cli.ts",
     "typecheck": "tsc",
     "test": "node --test \"test/**/*.test.ts\"",

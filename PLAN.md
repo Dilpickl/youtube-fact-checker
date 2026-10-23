@@ -34,22 +34,33 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
   reads the Connect Capitolo 5 screenshot: all seven assignments with correct
   names, course, and due dates; Strutture III and Cultura open, the rest
   closed; nothing flagged. Dylan checked it against Connect.
+- 2026-10-22: Milestone 2, the website. Plan page lays assignments out by day
+  (past due, today, each day this week, later, needs a date, done); screenshots
+  are added by button, paste, or drag and reviewed before saving; duplicates
+  merge; grade totals left out are remembered; courses are inferred; Mark done
+  has Undo and Reopen. Dylan tried their own Canvas and PHYS 110 screenshots,
+  the 11:59 PM times, and Undo. Re-importing and the "Same assignment?"
+  question were checked by Claude through the server, not yet by Dylan.
 
 ## Next
 
-1. **Milestone 2, website (built 2026-10-21, not yet tried by Dylan):** review and fix an import, save assignments, add
-   more screenshots
-   (merge duplicates, apply updates).
-2. "What now?": energy level, one task, reason, start-by time, "Not now".
+1. **Milestone 3, "What now?"** on the Now page: one task, a one-line reason,
+   a start-by time, and "Not now" / "Too tired?". Done when Dylan opens Now
+   and sees a task (e.g. Discussione 4) with a start-by time Dylan agrees with,
+   "Too tired?" gives something smaller, and "Not now" gives the next one.
+2. Class schedule and time available ("40 minutes before ITAL 101"); also
+   feeds the Today itinerary and the debriefs.
 3. Focus timer: start, done, next up; records time actually spent.
 4. Learning: compare timer data with estimates, adjust per course; learn which
-   hours Dylan focuses best.
+   hours Dylan focuses best (this replaces asking for energy).
 5. Discord bot: add tasks by message or photo, "what now?", morning debrief
    (due today, keeping up, first class, weather).
 6. Evening "prep for tomorrow" debrief.
 7. Canvas calendar feed import.
 8. Exams: split into study sessions spread over the days before.
 9. Travel time to first class (needs a maps API).
+10. Shelved for now: a character for the assistant (pickle, owl, or cat
+    concepts were shown 2026-10-21).
 
 **Reminder for Claude:** once import works, build a test set of real
 screenshots across platforms and measure extraction accuracy before tuning;
@@ -91,6 +102,22 @@ numbers are the resume evidence Dylan wants.
 - **2026-10-20 — Ambitious scope on purpose.** Dylan wants everything from the
   website to the bot and isn't worried about the 24-hour budget. Build in the
   order under Next so each step is usable on its own.
+- **2026-10-22 — No energy picker; "Too tired?" instead.** Claude suggested
+  asking for energy before each pick; Dylan asked whether that's really worth
+  it. Agreed: asking every time adds friction and self-reports are unreliable.
+  Instead the pick needs no input, "Too tired?" swaps in something smaller
+  only when needed, time available (from class times) comes next, and the
+  learning milestone infers energy patterns from the focus timer.
+- **2026-10-22 — Two pages: Now and Plan.** Dylan felt showing everything
+  next to the next task would still be overwhelming. Now shows only the next
+  task; Plan is the organized "display" of everything, and holds importing.
+- **2026-10-22 — The server saves to SQLite** (Node's built-in driver) so the
+  website and the later Discord bot share one copy.
+- **2026-10-22 — `npm start` restarts itself on code changes** and builds the
+  page script in memory, after Dylan kept hitting a stale server.
+- **2026-10-22 — "Mark done" can be undone.** Dylan found no way back: the
+  confirmation now has Undo (restores the previous status, e.g. "Not open
+  yet"), and items in Done have Reopen.
 - **2026-10-20 — How the two models' answers combine.** If Claude can't tell
   whether a task is open and TypeSafe is confident, use TypeSafe; if TypeSafe
   is unsure (near 50%), go with Claude. Flag a row only for a doubtful due
@@ -107,11 +134,31 @@ numbers are the resume evidence Dylan wants.
 
 ## Problems
 
+- **2026-10-22 — Restart loop.** Watch mode restarted the server endlessly:
+  each start wrote `dist/app.js`, and Node's watcher on Windows reacted to it
+  even though `dist/` wasn't watched (found by logging every file event).
+  Fixed by serving the page script from memory. Also: an old server left
+  running in another terminal held port 3000; the server now says so in
+  plain words.
 - **2026-10-21 — Grade totals can't be told apart from the image alone.**
   Canvas lists Connect work as "Chapter 1–4" grade lines. Without a hint taken
   from the test screenshot (removed as unfair), Haiku and TypeSafe disagree and
   vary run to run. Resolved by design: disagreements are flagged in review, and
   rows the student leaves out are saved as ignored so later imports skip them.
+- **2026-10-22 — November deadlines showed 10:59 PM instead of 11:59 PM**
+  (found by Dylan). The model wrote every date with October's daylight-time
+  offset (-05:00), but Illinois is on -06:00 after Nov 1. Now the model only
+  copies the clock time shown, and code adds the offset for the student's time
+  zone (`TIME_ZONE`, default America/Chicago) on that date.
+- **2026-10-22 — "Check the date" on every row of a cropped screenshot.**
+  TypeSafe was asked to confirm "Nov 13, 2026", but the crop didn't show the
+  year (the full page did, in the sidebar). Questions now leave out the year,
+  and TypeSafe is told today's date, which also fixed it calling "Available
+  until Oct 23" closed. Confidence went from 49-80% to 96-99%.
+- **2026-10-22 — Course missing on a cropped screenshot** (found by Dylan, who
+  typed "Italian" while the other rows said "ITAL 101"). A page's one shown
+  course now fills its blank rows; with none shown, TypeSafe picks among the
+  saved courses, so one course isn't saved under two names.
 - **2026-10-21 — "Due Dec 4 → Dec 4" false change.** A screenshot without a
   time zone got a different guessed offset; changes now compare the clock time
   shown.

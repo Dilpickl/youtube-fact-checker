@@ -8,6 +8,7 @@ import {
   fitImage,
   imageFormat,
   resolveRow,
+  wallClockToIso,
 } from "../src/import-screenshot.ts";
 
 test("recognizes PNG and JPEG screenshots and rejects other files", async () => {
@@ -28,7 +29,7 @@ test("shrinks screenshots to the size TypeSafe accepts", async () => {
 test("writes due dates the way the course page shows them", () => {
   assert.equal(
     describeDue("2026-10-20T23:59:00-05:00"),
-    "due Oct 20, 2026 at 11:59 PM",
+    "due Oct 20 at 11:59 PM",
   );
   assert.equal(describeDue(null), "with no due date shown");
 });
@@ -109,4 +110,21 @@ test("asks for a date on undated work that isn't finished", () => {
     dueAt: null,
   };
   assert.equal(resolveRow(doneQuiz, sure("closed")).flag, null);
+});
+
+// Dylan's review showed Nov 13 "10:59 PM" for an 11:59 PM deadline: the model
+// had used October's daylight-time offset for a date after Nov 1.
+test("adds the right offset on each side of the daylight saving change", () => {
+  assert.equal(
+    wallClockToIso("2026-10-20T23:59", "America/Chicago"),
+    "2026-10-20T23:59:00-05:00",
+  );
+  assert.equal(
+    wallClockToIso("2026-11-13T23:59", "America/Chicago"),
+    "2026-11-13T23:59:00-06:00",
+  );
+  assert.equal(
+    wallClockToIso("2026-11-13T23:59", "UTC"),
+    "2026-11-13T23:59:00+00:00",
+  );
 });

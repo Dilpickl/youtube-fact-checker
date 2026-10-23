@@ -1,6 +1,6 @@
 // The website's server: the pages, plus a small JSON API for importing
-// screenshots, saving reviewed rows, and marking work done.
-// Start it with `npm start`.
+// screenshots, saving reviewed rows, and changing an assignment's status.
+// Start it with `npm start`, which restarts it when code changes.
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import {
@@ -12,7 +12,11 @@ import { dirname } from "node:path";
 import { z } from "zod";
 import { STATUSES, type ReviewRow } from "./assignment.ts";
 import { importScreenshot } from "./import-screenshot.ts";
-import { reviewImport, typeSafeJudgeSame } from "./match.ts";
+import {
+  reviewImport,
+  typeSafeGuessCourse,
+  typeSafeJudgeSame,
+} from "./match.ts";
 import { openStore, type Store } from "./store.ts";
 
 const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
@@ -20,7 +24,6 @@ const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
 const PAGES: Record<string, [file: string, type: string]> = {
   "/": ["web/index.html", "text/html; charset=utf-8"],
   "/styles.css": ["web/styles.css", "text/css; charset=utf-8"],
-  "/app.js": ["dist/app.js", "text/javascript; charset=utf-8"],
 };
 
 const SaveRequest = z.object({
@@ -41,6 +44,8 @@ const SaveRequest = z.object({
     .max(500),
 });
 
+const StatusRequest = z.object({ status: z.enum(STATUSES) });
+
 /** Reads a screenshot into rows to review; tests swap in a fake. */
 export type ReviewScreenshot = (
   bytes: Uint8Array,
@@ -48,7 +53,10 @@ export type ReviewScreenshot = (
 ) => Promise<ReviewRow[]>;
 
 const reviewScreenshot: ReviewScreenshot = async (bytes, store) =>
-  reviewImport(await importScreenshot(bytes), store.list(), typeSafeJudgeSame);
+  reviewImport(await importScreenshot(bytes), store.list(), {
+    same: typeSafeJudgeSame,
+    course: typeSafeGuessCourse,
+  });
 
 class HttpError extends Error {
   readonly status: number;
@@ -61,10 +69,11 @@ class HttpError extends Error {
 export function createApp(
   store: Store,
   review: ReviewScreenshot = reviewScreenshot,
+  pageScript = "",
 ) {
   return createServer(async (request, response) => {
     try {
-      await route(request, response, store, review);
+      await route(request, response, store, review, pageScript);
     } catch (error) {
       if (error instanceof HttpError) {
         sendJson(response, error.status, { error: error.message });
@@ -83,6 +92,7 @@ async function route(
   response: ServerResponse,
   store: Store,
   review: ReviewScreenshot,
+  pageScript: string,
 ): Promise<void> {
   const path = new URL(request.url ?? "/", "http://localhost").pathname;
   const page = PAGES[path];
@@ -91,6 +101,11 @@ async function route(
     const [file, type] = page;
     response.writeHead(200, { "Content-Type": type });
     response.end(await readFile(file));
+  } else if (request.method === "GET" && path === "/app.js") {
+    response.writeHead(200, {
+      "Content-Type": "text/javascript; charset=utf-8",
+    });
+    response.end(pageScript);
   } else if (request.method === "GET" && path === "/api/assignments") {
     sendJson(response, 200, store.list());
   } else if (request.method === "POST" && path === "/api/import") {
@@ -102,13 +117,7 @@ async function route(
       throw new HttpError(502, `Couldn't read that screenshot: ${reason}`);
     }
   } else if (request.method === "POST" && path === "/api/save") {
-    const body = await readBody(request);
-    let json: unknown;
-    try {
-      json = JSON.parse(new TextDecoder().decode(body));
-    } catch {
-      throw new HttpError(400, "That wasn't valid JSON.");
-    }
+    const json = await readJson(request);
     const parsed = SaveRequest.safeParse(json);
     if (!parsed.success) {
       throw new HttpError(400, parsed.error.issues[0].message);
@@ -121,10 +130,12 @@ async function route(
     sendJson(response, 200, store.list());
   } else if (
     request.method === "POST" &&
-    /^\/api\/assignments\/\d+\/done$/.test(path)
+    /^\/api\/assignments\/\d+\/status$/.test(path)
   ) {
     const id = Number(path.split("/")[3]);
-    if (!store.setStatus(id, "closed")) {
+    const parsed = StatusRequest.safeParse(await readJson(request));
+    if (!parsed.success) throw new HttpError(400, "That isn't a status.");
+    if (!store.setStatus(id, parsed.data.status)) {
       throw new HttpError(404, "That assignment doesn't exist anymore.");
     }
     sendJson(response, 200, store.list());
@@ -149,16 +160,51 @@ async function readBody(request: IncomingMessage): Promise<Uint8Array> {
   return Buffer.concat(chunks);
 }
 
+async function readJson(request: IncomingMessage): Promise<unknown> {
+  const body = await readBody(request);
+  try {
+    return JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    throw new HttpError(400, "That wasn't valid JSON.");
+  }
+}
+
 function sendJson(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, { "Content-Type": "application/json" });
   response.end(JSON.stringify(body));
 }
 
 if (import.meta.main) {
+  // Build the page's script in memory on every start; `npm start` restarts the
+  // server when src/ or web/ changes, so the page is never stale. (Writing it
+  // to disk instead made Node's watcher on Windows restart in a loop.)
+  const { build } = await import("esbuild");
+  const { outputFiles } = await build({
+    entryPoints: ["web/app.ts"],
+    bundle: true,
+    format: "esm",
+    target: "es2022",
+    write: false,
+    logLevel: "warning",
+  });
   const databasePath = process.env.DB_PATH ?? "data/assignments.db";
   mkdirSync(dirname(databasePath), { recursive: true });
   const port = Number(process.env.PORT ?? 3000);
-  createApp(openStore(databasePath)).listen(port, "127.0.0.1", () => {
+  const pageScript = outputFiles[0].text;
+  const server = createApp(
+    openStore(databasePath),
+    reviewScreenshot,
+    pageScript,
+  );
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code !== "EADDRINUSE") throw error;
+    console.error(
+      `Port ${port} is already in use, probably by another copy of this server. ` +
+        "Stop that one (Ctrl+C in its terminal) and run npm start again.",
+    );
+    process.exit(1);
+  });
+  server.listen(port, "127.0.0.1", () => {
     console.log(`Schoolwork assistant running at http://localhost:${port}`);
   });
 }

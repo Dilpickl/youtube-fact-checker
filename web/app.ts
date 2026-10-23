@@ -13,6 +13,7 @@ import { buildPlan } from "../src/plan.ts";
 interface Notice {
   text: string;
   kind: "good" | "error";
+  undo?: () => void;
 }
 
 /** A row under review, plus the student's answer to "Same assignment?". */
@@ -208,18 +209,43 @@ async function saveDrafts() {
   }
 }
 
-async function markDone(assignment: SavedAssignment) {
+async function setStatus(
+  assignment: SavedAssignment,
+  status: Status,
+  notice: Notice,
+) {
   try {
     state.assignments = await api<SavedAssignment[]>(
-      `/api/assignments/${assignment.id}/done`,
-      { method: "POST" },
+      `/api/assignments/${assignment.id}/status`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      },
     );
-    state.notice = { text: `Marked "${assignment.name}" done.`, kind: "good" };
+    state.notice = notice;
   } catch (error) {
     state.notice = { text: messageOf(error), kind: "error" };
   }
   render();
 }
+
+const backOnPlan = (assignment: SavedAssignment): Notice => ({
+  text: `"${assignment.name}" is back on your plan.`,
+  kind: "good",
+});
+
+const markDone = (assignment: SavedAssignment) =>
+  setStatus(assignment, "closed", {
+    text: `Marked "${assignment.name}" done.`,
+    kind: "good",
+    // Restores the exact status it had, e.g. "Not open yet".
+    undo: () =>
+      void setStatus(assignment, assignment.status, backOnPlan(assignment)),
+  });
+
+const reopen = (assignment: SavedAssignment) =>
+  setStatus(assignment, "open", backOnPlan(assignment));
 
 // ---- Pages ----
 
@@ -280,18 +306,23 @@ function renderPlan(): Node[] {
         { class: "notice", role: "status" },
         "Reading your screenshot. This takes about 20 seconds…",
       ),
-    state.notice &&
-      el(
-        "p",
-        {
-          class: `notice ${state.notice.kind}`,
-          role: state.notice.kind === "error" ? "alert" : "status",
-        },
-        state.notice.text,
-      ),
+    state.notice && renderNotice(state.notice),
     state.drafts && renderReview(state.drafts),
     ...renderSchedule(),
   ].filter((node): node is HTMLElement => Boolean(node));
+}
+
+function renderNotice(notice: Notice): HTMLElement {
+  return el(
+    "p",
+    {
+      class: `notice ${notice.kind}`,
+      role: notice.kind === "error" ? "alert" : "status",
+    },
+    notice.text,
+    notice.undo ? " " : null,
+    notice.undo ? button("Undo", notice.undo) : null,
+  );
 }
 
 function renderSchedule(): Node[] {
@@ -348,7 +379,7 @@ function renderSchedule(): Node[] {
         "details",
         {},
         el("summary", {}, `Done (${plan.done.length})`),
-        list(plan.done, (a) => (a.dueAt ? dateLabel(a) : ""), false),
+        list(plan.done, (a) => (a.dueAt ? dateLabel(a) : ""), "reopen"),
       ),
     );
   }
@@ -358,7 +389,7 @@ function renderSchedule(): Node[] {
 function list(
   items: SavedAssignment[],
   when: (assignment: SavedAssignment) => string,
-  canMarkDone = true,
+  action: "done" | "reopen" = "done",
 ) {
   return el(
     "ul",
@@ -376,7 +407,9 @@ function list(
           el("br"),
           el("span", { class: "course" }, assignment.course || "No course"),
         ),
-        canMarkDone && button("Mark done", () => void markDone(assignment)),
+        action === "done"
+          ? button("Mark done", () => void markDone(assignment))
+          : button("Reopen", () => void reopen(assignment)),
       ),
     ),
   );
