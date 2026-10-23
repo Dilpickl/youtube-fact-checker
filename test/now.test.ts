@@ -24,6 +24,7 @@ const task = (
   aliases: [],
   ignored: false,
   estimateMinutes,
+  closedAt: null,
   sessions: options.sessions ?? [],
 });
 

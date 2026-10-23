@@ -60,3 +60,21 @@ test("a bad row saves nothing at all", () => {
   assert.deepEqual(store.list(), []);
   store.close();
 });
+
+// Voice Board 6 went from "Not open yet" to "Open" after Done and Reopen.
+test("reopening restores the status it had before it was done", () => {
+  const store = openStore(":memory:");
+  store.save([row({ name: "Voice Board 6", status: "not_open_yet" })]);
+  const [{ id }] = store.list();
+  store.setStatus(id, "closed", new Date("2026-10-22T22:00:00-05:00"));
+  const [done] = store.list();
+  assert.equal(done.closedAt, "2026-10-23T03:00:00.000Z");
+  assert.ok(store.reopen(id));
+  const [reopened] = store.list();
+  assert.deepEqual(
+    [reopened.status, reopened.closedAt],
+    ["not_open_yet", null],
+  );
+  assert.equal(store.reopen(id), false, "only closed work can be reopened");
+  store.close();
+});

@@ -17,6 +17,8 @@ export interface SavedAssignment {
   ignored: boolean;
   /** TypeSafe's estimate of the work, or null until it has been judged. */
   estimateMinutes: number | null;
+  /** When the student marked it done, or null (e.g. closed by the site). */
+  closedAt: string | null;
   /** Work sessions done on it, oldest first. */
   sessions: WorkSession[];
 }

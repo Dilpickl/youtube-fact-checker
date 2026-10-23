@@ -85,6 +85,12 @@ test("import, save, estimate, log work, mark done, and undo work end to end", as
 
   assert.equal(await setStatus("closed"), "closed", "mark done");
   assert.equal(await setStatus("open"), "open", "undo");
+  await setStatus("closed");
+  const reopened = await post(`/api/assignments/${assignment.id}/reopen`, "");
+  assert.equal(
+    ((await reopened.json()) as SavedAssignment[])[0].status,
+    "open",
+  );
 });
 
 test("rejects a save with a blank name and explains why", async () => {

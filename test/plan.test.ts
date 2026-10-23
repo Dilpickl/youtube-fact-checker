@@ -20,6 +20,7 @@ const due = (
   aliases: [],
   ignored,
   estimateMinutes: null,
+  closedAt: null,
   sessions: [],
 });
 

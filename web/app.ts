@@ -16,6 +16,7 @@ import {
   smallerItem,
   type WorkItem,
 } from "../src/now.ts";
+import { buildHistory, formatMinutes } from "../src/history.ts";
 import { buildPlan } from "../src/plan.ts";
 
 interface Notice {
@@ -333,8 +334,19 @@ async function undoWork(sessionId: number, finished: SavedAssignment | null) {
   render();
 }
 
-const reopen = (assignment: SavedAssignment) =>
-  setStatus(assignment, "open", backOnPlan(assignment));
+/** Puts finished work back the way it was, e.g. "Not open yet". */
+async function reopen(assignment: SavedAssignment) {
+  try {
+    state.assignments = await api<SavedAssignment[]>(
+      `/api/assignments/${assignment.id}/reopen`,
+      { method: "POST" },
+    );
+    state.notice = backOnPlan(assignment);
+  } catch (error) {
+    state.notice = { text: messageOf(error), kind: "error" };
+  }
+  render();
+}
 
 // ---- Pages ----
 
@@ -628,10 +640,10 @@ function renderSchedule(): Node[] {
   if (plan.done.length > 0) {
     nodes.push(
       el(
-        "details",
-        {},
-        el("summary", {}, `Done (${plan.done.length})`),
-        list(plan.done, (a) => (a.dueAt ? dateLabel(a) : ""), "reopen"),
+        "p",
+        { class: "muted" },
+        `${plan.done.length} done. `,
+        el("a", { href: "#history" }, "See them in History"),
       ),
     );
   }
@@ -641,7 +653,6 @@ function renderSchedule(): Node[] {
 function list(
   items: SavedAssignment[],
   when: (assignment: SavedAssignment) => string,
-  action: "done" | "reopen" = "done",
 ) {
   return el(
     "ul",
@@ -659,12 +670,121 @@ function list(
           el("br"),
           el("span", { class: "course" }, assignment.course || "No course"),
         ),
-        action === "done"
-          ? button("Mark done", () => void markDone(assignment))
-          : button("Reopen", () => void reopen(assignment)),
+        button("Mark done", () => void markDone(assignment)),
       ),
     ),
   );
+}
+
+// ---- History ----
+
+function renderHistory(): Node[] {
+  const notice = state.notice && renderNotice(state.notice);
+  if (state.loadFailed || !state.assignments) return renderSchedule();
+  const history = buildHistory(state.assignments, new Date());
+  const header = el("h1", {}, "History");
+
+  if (history.days.length === 0 && history.closedUndated.length === 0) {
+    return [
+      header,
+      el(
+        "div",
+        { class: "card", style: "margin-top: 16px" },
+        el("h2", { style: "margin-top: 0" }, "Nothing here yet"),
+        el(
+          "p",
+          { class: "muted" },
+          "When you finish work or log a session on Now, it shows up here, and you can undo it.",
+        ),
+      ),
+    ];
+  }
+
+  const time = (date: Date) =>
+    date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const row = (
+    when: string,
+    what: Node | string,
+    course: string,
+    action: HTMLElement,
+  ) =>
+    el(
+      "li",
+      {},
+      el("span", { class: "when" }, when),
+      el(
+        "span",
+        { class: "what" },
+        what,
+        el("br"),
+        el("span", { class: "course" }, course || "No course"),
+      ),
+      action,
+    );
+
+  const nodes: Node[] = [
+    header,
+    el(
+      "p",
+      { class: "hint muted" },
+      `Last 7 days: ${formatMinutes(history.weekMinutes)} of work logged, ${history.weekFinished} finished.`,
+    ),
+  ];
+  if (notice) nodes.push(notice);
+  for (const day of history.days) {
+    const totals = [
+      day.minutes > 0 && formatMinutes(day.minutes),
+      day.finished > 0 && `${day.finished} finished`,
+    ].filter(Boolean);
+    nodes.push(
+      el("h2", {}, `${day.label} · ${totals.join(", ")}`),
+      el(
+        "ul",
+        { class: "list" },
+        ...day.entries.map((entry) =>
+          entry.kind === "finished"
+            ? row(
+                time(entry.at),
+                el("span", {}, tag("Finished"), " ", entry.assignment.name),
+                entry.assignment.course,
+                button("Reopen", () => void reopen(entry.assignment)),
+              )
+            : row(
+                time(entry.at),
+                `${formatMinutes(entry.minutes)} on ${entry.assignment.name}`,
+                entry.assignment.course,
+                button("Remove", () => void undoWork(entry.sessionId, null)),
+              ),
+        ),
+      ),
+    );
+  }
+  if (history.closedUndated.length > 0) {
+    nodes.push(
+      el(
+        "details",
+        {},
+        el(
+          "summary",
+          {},
+          `Closed without a date (${history.closedUndated.length}): locked or past due on a course site, or marked done before dates were kept`,
+        ),
+        el(
+          "ul",
+          { class: "list" },
+          ...history.closedUndated.map((assignment) =>
+            row(
+              assignment.dueAt ? dateLabel(assignment) : "",
+              assignment.name,
+              assignment.course,
+              button("Reopen", () => void reopen(assignment)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  return nodes;
 }
 
 // ---- Review ----
@@ -798,12 +918,18 @@ function renderAsk(draft: Draft, savedName: string, index: number) {
 // ---- Wiring ----
 
 function render() {
-  const page = location.hash === "#plan" ? "plan" : "now";
+  const page =
+    location.hash === "#plan"
+      ? "plan"
+      : location.hash === "#history"
+        ? "history"
+        : "now";
   for (const link of document.querySelectorAll<HTMLAnchorElement>("nav a")) {
     if (link.dataset.page === page) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
-  app.replaceChildren(...(page === "now" ? renderNow() : renderPlan()));
+  const pages = { now: renderNow, plan: renderPlan, history: renderHistory };
+  app.replaceChildren(...pages[page]());
 }
 
 window.addEventListener("hashchange", render);

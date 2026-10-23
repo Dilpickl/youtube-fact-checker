@@ -47,29 +47,30 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
   Done with this session / Finished it all log work (with Undo); Not now and
   Too tired? change the pick. Dylan checked that the order matches what they'd
   expect; more real use will test the logic.
+- 2026-10-22: History page. Finished work and logged sessions by day, newest
+  first, with weekly and daily totals; Reopen restores the status a task had
+  before it was done; Remove deletes a session. Dylan tried Reopen.
 
 ## Next
 
-1. **History page:** finished assignments and logged sessions by day, newest
-   first, with totals, Reopen (restores the status it had before), and Remove.
-2. **Canvas calendar feed:** paste the feed link once; new Canvas assignments
+1. **Canvas calendar feed:** paste the feed link once; new Canvas assignments
    arrive for review without screenshots. (No submission status in the feed;
    a Canvas access token could add it if Illinois allows student tokens.)
-3. **Paste text or a link** as another way to import, beside screenshots;
+2. **Paste text or a link** as another way to import, beside screenshots;
    text works on pages behind a login (Gradescope, PrairieLearn, Connect).
-4. Class schedule and time available; also feeds the Today itinerary and the
+3. Class schedule and time available; also feeds the Today itinerary and the
    debriefs.
-5. Focus timer: records real time spent (sessions currently log the planned
+4. Focus timer: records real time spent (sessions currently log the planned
    minutes).
-6. Learning: compare real times with estimates, adjust per course; learn which
+5. Learning: compare real times with estimates, adjust per course; learn which
    hours Dylan focuses best; tune session sizes.
-7. Discord bot: add tasks by message or photo, "what now?", morning debrief
+6. Discord bot: add tasks by message or photo, "what now?", morning debrief
    (due today, keeping up, first class, weather).
-8. Evening "prep for tomorrow" debrief.
-9. Exams: dated exams become study sessions (the scheduler already splits big
+7. Evening "prep for tomorrow" debrief.
+8. Exams: dated exams become study sessions (the scheduler already splits big
    tasks); "tests the next day take precedence."
-10. Travel time to first class (needs a maps API).
-11. Shelved for now: a character for the assistant (pickle, owl, or cat
+9. Travel time to first class (needs a maps API).
+10. Shelved for now: a character for the assistant (pickle, owl, or cat
     concepts were shown 2026-10-21).
 
 **Reminder for Claude:** once import works, build a test set of real

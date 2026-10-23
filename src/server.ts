@@ -190,6 +190,14 @@ async function route(
     }
     if (parsed.data.finished) store.setStatus(id, "closed");
     sendJson(response, 200, { sessionId, assignments: store.list() });
+  } else if (
+    request.method === "POST" &&
+    /^\/api\/assignments\/\d+\/reopen$/.test(path)
+  ) {
+    if (!store.reopen(Number(path.split("/")[3]))) {
+      throw new HttpError(404, "That assignment isn't marked done.");
+    }
+    sendJson(response, 200, store.list());
   } else if (request.method === "DELETE" && /^\/api\/work\/\d+$/.test(path)) {
     if (!store.deleteWork(Number(path.split("/")[3]))) {
       throw new HttpError(404, "That session was already removed.");

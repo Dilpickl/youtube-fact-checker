@@ -18,6 +18,7 @@ interface AssignmentRecord {
   aliases: string;
   ignored: number;
   estimate_minutes: number | null;
+  closed_at: string | null;
 }
 
 const toAssignment = (
@@ -32,6 +33,7 @@ const toAssignment = (
   aliases: JSON.parse(record.aliases) as string[],
   ignored: record.ignored === 1,
   estimateMinutes: record.estimate_minutes,
+  closedAt: record.closed_at,
   sessions,
 });
 
@@ -45,14 +47,22 @@ export function openStore(path: string) {
     status TEXT NOT NULL,
     aliases TEXT NOT NULL DEFAULT '[]',
     ignored INTEGER NOT NULL DEFAULT 0,
-    estimate_minutes INTEGER
+    estimate_minutes INTEGER,
+    closed_at TEXT,
+    reopen_status TEXT
   )`);
-  // Databases made before estimates existed get the column added.
-  const columns = db.prepare("PRAGMA table_info(assignments)").all() as {
-    name: string;
-  }[];
-  if (!columns.some((column) => column.name === "estimate_minutes")) {
-    db.exec("ALTER TABLE assignments ADD COLUMN estimate_minutes INTEGER");
+  // Databases made before a column existed get it added.
+  const columns = (
+    db.prepare("PRAGMA table_info(assignments)").all() as { name: string }[]
+  ).map((column) => column.name);
+  for (const [name, type] of [
+    ["estimate_minutes", "INTEGER"],
+    ["closed_at", "TEXT"],
+    ["reopen_status", "TEXT"],
+  ]) {
+    if (!columns.includes(name)) {
+      db.exec(`ALTER TABLE assignments ADD COLUMN ${name} ${type}`);
+    }
   }
   db.exec(`CREATE TABLE IF NOT EXISTS work_log (
     id INTEGER PRIMARY KEY,
@@ -137,11 +147,33 @@ export function openStore(path: string) {
       }
     },
 
-    setStatus(id: number, status: Status): boolean {
+    /**
+     * Marking an assignment closed records when, and what status to restore if
+     * it's reopened; any other status clears that.
+     */
+    setStatus(id: number, status: Status, at = new Date()): boolean {
+      const saved = find(id);
+      if (!saved) return false;
+      if (status === "closed" && saved.status !== "closed") {
+        db.prepare(
+          "UPDATE assignments SET status = 'closed', closed_at = ?, reopen_status = ? WHERE id = ?",
+        ).run(at.toISOString(), saved.status, id);
+      } else if (status !== "closed") {
+        db.prepare(
+          "UPDATE assignments SET status = ?, closed_at = NULL, reopen_status = NULL WHERE id = ?",
+        ).run(status, id);
+      }
+      return true;
+    },
+
+    /** Puts a closed assignment back the way it was before it was closed. */
+    reopen(id: number): boolean {
       return (
         db
-          .prepare("UPDATE assignments SET status = ? WHERE id = ?")
-          .run(status, id).changes > 0
+          .prepare(
+            "UPDATE assignments SET status = COALESCE(reopen_status, 'open'), closed_at = NULL, reopen_status = NULL WHERE id = ? AND status = 'closed'",
+          )
+          .run(id).changes > 0
       );
     },
 
