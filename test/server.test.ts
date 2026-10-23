@@ -2,21 +2,53 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import type { ReviewRow, SavedAssignment } from "../src/assignment.ts";
+import type { CheckedAssignment } from "../src/import-screenshot.ts";
 import { createApp } from "../src/server.ts";
 import { openStore } from "../src/store.ts";
 
-const reviewRow: ReviewRow = {
+const checkedRow: CheckedAssignment = {
   name: "Cultura (Interpretiamo)- 5",
   course: "ITAL 101",
   dueAt: "2026-10-21T23:59:00-05:00",
   status: "open",
   include: true,
   flag: null,
-  match: { kind: "new" },
+  dueProbability: 1,
+  statusChoice: "open",
+  statusProbability: 1,
+  totalProbability: 0,
 };
 
+const feedLink =
+  "https://canvas.illinois.edu/feeds/calendars/user_secret123.ics";
+const futureFeed = [
+  "BEGIN:VCALENDAR",
+  "BEGIN:VEVENT",
+  "UID:event-assignment-1",
+  "DTSTART:20301024T045900Z",
+  "SUMMARY:Discussione 9 [ITAL 101 1 FA30]",
+  "END:VEVENT",
+  "END:VCALENDAR",
+].join("\r\n");
+let fetchedFeed = "";
+
 const server = createApp(openStore(":memory:"), {
-  review: async () => [reviewRow],
+  readScreenshot: async () => [checkedRow],
+  // Treats every row as new; matching itself is tested in match.test.ts.
+  match: async (rows) =>
+    rows.map((row): ReviewRow => ({
+      name: row.name,
+      course: row.course,
+      dueAt: row.dueAt,
+      status: row.status,
+      include: row.include,
+      flag: row.flag,
+      match: { kind: "new" },
+    })),
+  fetchFeed: async (url) => {
+    fetchedFeed = url;
+    return futureFeed;
+  },
   estimate: async (assignments) =>
     new Map(assignments.map((assignment) => [assignment.id, 25])),
 });
@@ -117,4 +149,35 @@ test("rejects a save with a blank name and explains why", async () => {
 
 test("answers unknown paths with a 404", async () => {
   assert.equal((await fetch(base + "/api/nope")).status, 404);
+});
+
+test("connects a Canvas feed, checks it, and never sends the link back", async () => {
+  const put = (feedUrl: string) =>
+    fetch(base + "/api/canvas", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedUrl }),
+    });
+  const bad = await put("https://canvas.illinois.edu/courses/72857");
+  assert.equal(bad.status, 400);
+
+  const connected = await put(feedLink);
+  const status = await connected.text();
+  assert.deepEqual(JSON.parse(status), { connected: true, lastChecked: null });
+  assert.ok(!status.includes("secret123"));
+
+  const checked = await post("/api/canvas/check", "");
+  const { rows } = (await checked.json()) as { rows: ReviewRow[] };
+  assert.equal(fetchedFeed, feedLink);
+  assert.deepEqual(
+    rows.map((row) => [row.name, row.course, row.status]),
+    [["Discussione 9", "ITAL 101", "open"]],
+  );
+
+  const disconnected = await fetch(base + "/api/canvas", { method: "DELETE" });
+  assert.deepEqual(await disconnected.json(), {
+    connected: false,
+    lastChecked: null,
+  });
+  assert.equal((await post("/api/canvas/check", "")).status, 400);
 });

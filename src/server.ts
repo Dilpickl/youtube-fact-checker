@@ -1,6 +1,6 @@
 // The website's server: the pages, plus a small JSON API for importing
-// screenshots, saving reviewed rows, estimating work, logging work sessions,
-// and changing an assignment's status.
+// screenshots, checking the Canvas feed, saving reviewed rows, estimating
+// work, logging work sessions, and changing an assignment's status.
 // Start it with `npm start`, which restarts it when code changes.
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -11,9 +11,17 @@ import {
 } from "node:http";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { STATUSES, type ReviewRow } from "./assignment.ts";
+import {
+  STATUSES,
+  type ReviewRow,
+  type SavedAssignment,
+} from "./assignment.ts";
+import { feedRows, feedUrlProblem, newOrChanged, parseFeed } from "./canvas.ts";
 import { typeSafeEstimateMinutes, type EstimateMinutes } from "./estimate.ts";
-import { importScreenshot } from "./import-screenshot.ts";
+import {
+  importScreenshot,
+  type CheckedAssignment,
+} from "./import-screenshot.ts";
 import {
   reviewImport,
   typeSafeGuessCourse,
@@ -58,17 +66,23 @@ const WorkRequest = z.object({
   finished: z.boolean(),
 });
 
-/** Reads a screenshot into rows to review; tests swap in a fake. */
-export type ReviewScreenshot = (
-  bytes: Uint8Array,
-  store: Store,
-) => Promise<ReviewRow[]>;
+const CanvasRequest = z.object({ feedUrl: z.string().max(2000) });
 
-const reviewScreenshot: ReviewScreenshot = async (bytes, store) =>
-  reviewImport(await importScreenshot(bytes), store.list(), {
+const CANVAS_FEED = "canvasFeedUrl";
+const CANVAS_CHECKED = "canvasLastChecked";
+
+/** Compares imported rows with what's saved, using TypeSafe's judgments. */
+const matchRows = (rows: CheckedAssignment[], saved: SavedAssignment[]) =>
+  reviewImport(rows, saved, {
     same: typeSafeJudgeSame,
     course: typeSafeGuessCourse,
   });
+
+async function fetchFeed(url: string): Promise<string> {
+  const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  if (!response.ok) throw new Error(`Canvas answered ${response.status}`);
+  return response.text();
+}
 
 class HttpError extends Error {
   readonly status: number;
@@ -80,7 +94,9 @@ class HttpError extends Error {
 
 /** What the server calls out to; tests swap in fakes. */
 export interface Services {
-  review: ReviewScreenshot;
+  readScreenshot: (bytes: Uint8Array) => Promise<CheckedAssignment[]>;
+  match: typeof matchRows;
+  fetchFeed: (url: string) => Promise<string>;
   estimate: EstimateMinutes;
   /** The page's bundled script, built at startup. */
   pageScript: string;
@@ -88,7 +104,9 @@ export interface Services {
 
 export function createApp(store: Store, overrides: Partial<Services> = {}) {
   const services: Services = {
-    review: reviewScreenshot,
+    readScreenshot: importScreenshot,
+    match: matchRows,
+    fetchFeed,
     estimate: typeSafeEstimateMinutes,
     pageScript: "",
     ...overrides,
@@ -113,7 +131,7 @@ async function route(
   request: IncomingMessage,
   response: ServerResponse,
   store: Store,
-  { review, estimate, pageScript }: Services,
+  services: Services,
 ): Promise<void> {
   const path = new URL(request.url ?? "/", "http://localhost").pathname;
   const page = PAGES[path];
@@ -126,7 +144,7 @@ async function route(
     response.writeHead(200, {
       "Content-Type": "text/javascript; charset=utf-8",
     });
-    response.end(pageScript);
+    response.end(services.pageScript);
   } else if (request.method === "GET" && path === "/api/assignments") {
     sendJson(response, 200, store.list());
   } else if (request.method === "POST" && path === "/api/estimates") {
@@ -140,7 +158,7 @@ async function route(
           assignment.status !== "closed",
       );
     try {
-      store.setEstimates(await estimate(missing));
+      store.setEstimates(await services.estimate(missing));
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new HttpError(502, `Couldn't estimate your tasks: ${reason}`);
@@ -149,7 +167,10 @@ async function route(
   } else if (request.method === "POST" && path === "/api/import") {
     const bytes = await readBody(request);
     try {
-      sendJson(response, 200, { rows: await review(bytes, store) });
+      const rows = await services.readScreenshot(bytes);
+      sendJson(response, 200, {
+        rows: await services.match(rows, store.list()),
+      });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new HttpError(502, `Couldn't read that screenshot: ${reason}`);
@@ -203,6 +224,22 @@ async function route(
       throw new HttpError(404, "That session was already removed.");
     }
     sendJson(response, 200, store.list());
+  } else if (path === "/api/canvas") {
+    await canvasSettings(request, response, store);
+  } else if (request.method === "POST" && path === "/api/canvas/check") {
+    const feedUrl = store.getSetting(CANVAS_FEED);
+    if (!feedUrl) throw new HttpError(400, "Connect Canvas first.");
+    let rows: ReviewRow[];
+    try {
+      const events = parseFeed(await services.fetchFeed(feedUrl));
+      rows = await services.match(feedRows(events, new Date()), store.list());
+    } catch (error) {
+      // Never echo the feed link: it works like a password.
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new HttpError(502, `Couldn't read your Canvas feed: ${reason}`);
+    }
+    store.setSetting(CANVAS_CHECKED, new Date().toISOString());
+    sendJson(response, 200, { rows: newOrChanged(rows) });
   } else {
     throw new HttpError(404, "Not found.");
   }
@@ -222,6 +259,32 @@ async function readBody(request: IncomingMessage): Promise<Uint8Array> {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
+}
+
+/** GET says whether Canvas is connected; PUT saves a feed link; DELETE forgets it. */
+async function canvasSettings(
+  request: IncomingMessage,
+  response: ServerResponse,
+  store: Store,
+) {
+  if (request.method === "PUT") {
+    const parsed = CanvasRequest.safeParse(await readJson(request));
+    const problem = parsed.success
+      ? feedUrlProblem(parsed.data.feedUrl)
+      : "Paste the Canvas feed link.";
+    if (problem) throw new HttpError(400, problem);
+    store.setSetting(CANVAS_FEED, parsed.data!.feedUrl.trim());
+    store.setSetting(CANVAS_CHECKED, null);
+  } else if (request.method === "DELETE") {
+    store.setSetting(CANVAS_FEED, null);
+    store.setSetting(CANVAS_CHECKED, null);
+  } else if (request.method !== "GET") {
+    throw new HttpError(404, "Not found.");
+  }
+  sendJson(response, 200, {
+    connected: store.getSetting(CANVAS_FEED) !== null,
+    lastChecked: store.getSetting(CANVAS_CHECKED),
+  });
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {

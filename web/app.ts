@@ -44,6 +44,14 @@ const state = {
   skipped: new Set<number>(),
   /** A task chosen by "Too tired?" instead of the next in order. */
   tiredPick: null as number | null,
+  canvas: null as { connected: boolean; lastChecked: string | null } | null,
+  canvasFormOpen: false,
+  /** What's typed in the feed link box, kept across re-renders. */
+  canvasDraft: "",
+  canvasError: null as string | null,
+  checkingCanvas: false,
+  /** Where the rows under review came from. */
+  reviewSource: "screenshot" as "screenshot" | "canvas",
 };
 
 const app = document.querySelector<HTMLElement>("#app")!;
@@ -195,6 +203,7 @@ async function importFile(file: File) {
       };
     } else {
       state.drafts = rows.map((row) => ({ ...row, sameAnswer: null }));
+      state.reviewSource = "screenshot";
       state.reviewError = null;
     }
   } catch (error) {
@@ -346,6 +355,183 @@ async function reopen(assignment: SavedAssignment) {
     state.notice = { text: messageOf(error), kind: "error" };
   }
   render();
+}
+
+// ---- Canvas ----
+
+const CANVAS_RECHECK_MS = 6 * 60 * 60 * 1000;
+
+async function loadCanvas() {
+  try {
+    state.canvas = await api("/api/canvas");
+  } catch {
+    return; // The rest of the app works without it.
+  }
+  const last = state.canvas?.lastChecked;
+  if (
+    state.canvas?.connected &&
+    (!last || Date.now() - Date.parse(last) > CANVAS_RECHECK_MS)
+  ) {
+    await checkCanvas(true);
+  }
+  render();
+}
+
+async function connectCanvas(feedUrl: string) {
+  state.canvasError = null;
+  try {
+    state.canvas = await api("/api/canvas", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedUrl }),
+    });
+    state.canvasFormOpen = false;
+    state.canvasDraft = "";
+    await checkCanvas(false);
+  } catch (error) {
+    state.canvasError = messageOf(error);
+  }
+  render();
+}
+
+async function disconnectCanvas() {
+  try {
+    state.canvas = await api("/api/canvas", { method: "DELETE" });
+    state.notice = { text: "Canvas disconnected.", kind: "good" };
+  } catch (error) {
+    state.notice = { text: messageOf(error), kind: "error" };
+  }
+  render();
+}
+
+/** Quiet checks (the automatic ones) say nothing when nothing is new. */
+async function checkCanvas(quiet: boolean) {
+  if (state.drafts || state.checkingCanvas) {
+    if (!quiet) {
+      state.notice = {
+        text: "Save or cancel the import you're reviewing first.",
+        kind: "error",
+      };
+    }
+    return render();
+  }
+  state.checkingCanvas = true;
+  if (!quiet) state.notice = null;
+  render();
+  try {
+    const { rows } = await api<{ rows: ReviewRow[] }>("/api/canvas/check", {
+      method: "POST",
+    });
+    if (rows.length > 0) {
+      state.drafts = rows.map((row) => ({ ...row, sameAnswer: null }));
+      state.reviewSource = "canvas";
+      state.reviewError = null;
+    } else if (!quiet) {
+      state.notice = {
+        text: "Canvas is up to date: nothing new or changed.",
+        kind: "good",
+      };
+    }
+    state.canvas = await api("/api/canvas");
+  } catch (error) {
+    state.notice = { text: messageOf(error), kind: "error" };
+  } finally {
+    state.checkingCanvas = false;
+    render();
+  }
+}
+
+/** "just now", "12 min ago", "3 h ago", or a date. */
+function timeAgo(iso: string): string {
+  const minutes = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`;
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function renderCanvasBar(): HTMLElement | null {
+  if (!state.canvas) return null;
+  if (state.canvasFormOpen) {
+    const input = el("input", {
+      type: "url",
+      placeholder: "https://canvas.illinois.edu/feeds/calendars/user_….ics",
+      "aria-label": "Canvas calendar feed link",
+    });
+    input.value = state.canvasDraft;
+    input.addEventListener("input", () => {
+      state.canvasDraft = input.value;
+    });
+    const submit = () => {
+      if (!input.value.trim()) {
+        state.canvasError = "Paste your Canvas feed link first.";
+        return render();
+      }
+      void connectCanvas(input.value);
+    };
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") submit();
+    });
+    return el(
+      "div",
+      { class: "canvas-bar card" },
+      el("strong", {}, "Connect Canvas"),
+      el(
+        "p",
+        { class: "muted" },
+        "In Canvas, open Calendar, click Calendar Feed at the bottom right, and copy the link. It works like a password, so it stays on this computer.",
+      ),
+      input,
+      state.canvasError &&
+        el("p", { class: "error-text", role: "alert" }, state.canvasError),
+      el(
+        "div",
+        { class: "actions" },
+        button("Connect", submit, "primary"),
+        button("Cancel", () => {
+          state.canvasFormOpen = false;
+          state.canvasError = null;
+          render();
+        }),
+      ),
+    );
+  }
+  if (!state.canvas.connected) {
+    return el(
+      "div",
+      { class: "canvas-bar" },
+      el(
+        "span",
+        { class: "muted" },
+        "Get new Canvas assignments without screenshots.",
+      ),
+      button("Connect Canvas", () => {
+        state.canvasFormOpen = true;
+        render();
+      }),
+    );
+  }
+  const check = button(
+    state.checkingCanvas ? "Checking…" : "Check Canvas",
+    () => void checkCanvas(false),
+  );
+  check.disabled = state.checkingCanvas;
+  return el(
+    "div",
+    { class: "canvas-bar" },
+    el(
+      "span",
+      { class: "muted" },
+      `Canvas connected · checked ${
+        state.canvas.lastChecked ? timeAgo(state.canvas.lastChecked) : "never"
+      }`,
+    ),
+    check,
+    button("Disconnect", () => void disconnectCanvas(), "link"),
+  );
 }
 
 // ---- Pages ----
@@ -564,6 +750,7 @@ function renderPlan(): Node[] {
       ),
       el("div", {}, add, fileInput),
     ),
+    renderCanvasBar(),
     state.importing &&
       el(
         "p",
@@ -802,6 +989,12 @@ function renderReview(drafts: Draft[]): HTMLElement {
     "section",
     { class: "card review", "aria-label": "Review import" },
     el("h2", { style: "margin-top: 0" }, `Review: ${kept.length} to save`),
+    state.reviewSource === "canvas" &&
+      el(
+        "p",
+        { class: "muted" },
+        "New or changed assignments from your Canvas feed.",
+      ),
     el(
       "p",
       { class: "muted" },
@@ -957,3 +1150,4 @@ app.addEventListener("drop", (event) => {
 });
 
 void loadAssignments();
+void loadCanvas();

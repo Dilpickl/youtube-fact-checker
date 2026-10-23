@@ -61,6 +61,18 @@ export interface SaveRow {
   ignored: boolean;
 }
 
+/**
+ * The course code in a course name, so different spellings of one course
+ * compare equal: "ITAL 101", Canvas's "ital_101_120268_264325", and "ITAL101"
+ * all give "ITAL 101". A name without a code comes back as is.
+ */
+export function courseCode(course: string): string {
+  const match = /(?:^|[^A-Za-z])([A-Za-z]{2,5})[\s_-]*(\d{3})(?!\d)/.exec(
+    course,
+  );
+  return match ? `${match[1].toUpperCase()} ${match[2]}` : course.trim();
+}
+
 /** "2026-10-23T23:59:00-05:00" → "Oct 23", using the clock time it was written in. */
 export function shortDate(dueAt: string): string {
   return new Date(`${dueAt.slice(0, 19)}Z`).toLocaleDateString("en-US", {

@@ -13,7 +13,7 @@ const EXTRACT_MODEL = "claude-haiku-5-5";
 const MAX_IMAGE_SIDE = 1568;
 // ponytail: one time zone for every page, the student's; a page showing times
 // in another zone would be read as local. Add per-page zones if that happens.
-const TIME_ZONE = process.env.TIME_ZONE ?? "America/Chicago";
+export const TIME_ZONE = process.env.TIME_ZONE ?? "America/Chicago";
 // ponytail: one fixed cutoff for "confident"; tune it once there's a test set
 // of real screenshots with known answers.
 export const CONFIDENT = 0.7;

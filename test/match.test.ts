@@ -179,3 +179,13 @@ test("with no course on the page, TypeSafe picks among saved courses", async () 
     "an unsure guess stays blank",
   );
 });
+
+// The duplicate Dylan got: the same assignment under Canvas's course code.
+test("the same course spelled differently still matches", async () => {
+  const [row] = await reviewImport(
+    [imported({ course: "ital_101_120268_264325" })],
+    [saved({})],
+    judges(),
+  );
+  assert.equal(row.match.kind, "same");
+});

@@ -50,26 +50,29 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
 - 2026-10-22: History page. Finished work and logged sessions by day, newest
   first, with weekly and daily totals; Reopen restores the status a task had
   before it was done; Remove deletes a session. Dylan tried Reopen.
+- 2026-10-22: Canvas calendar feed. Connect once on Plan (the link stays in
+  the local database and is never sent back to the page); Check Canvas, and an
+  automatic check every 6 hours, bring in only new or changed upcoming
+  assignments for review. Dylan connected the real feed (ENG 100, ITAL 101).
 
 ## Next
 
-1. **Canvas calendar feed:** paste the feed link once; new Canvas assignments
-   arrive for review without screenshots. (No submission status in the feed;
-   a Canvas access token could add it if Illinois allows student tokens.)
-2. **Paste text or a link** as another way to import, beside screenshots;
+1. **Paste text or a link** as another way to import, beside screenshots;
    text works on pages behind a login (Gradescope, PrairieLearn, Connect).
-3. Class schedule and time available; also feeds the Today itinerary and the
+2. Class schedule and time available; also feeds the Today itinerary and the
    debriefs.
-4. Focus timer: records real time spent (sessions currently log the planned
+3. Focus timer: records real time spent (sessions currently log the planned
    minutes).
-5. Learning: compare real times with estimates, adjust per course; learn which
+4. Learning: compare real times with estimates, adjust per course; learn which
    hours Dylan focuses best; tune session sizes.
-6. Discord bot: add tasks by message or photo, "what now?", morning debrief
+5. Discord bot: add tasks by message or photo, "what now?", morning debrief
    (due today, keeping up, first class, weather).
-7. Evening "prep for tomorrow" debrief.
-8. Exams: dated exams become study sessions (the scheduler already splits big
+6. Evening "prep for tomorrow" debrief.
+7. Exams: dated exams become study sessions (the scheduler already splits big
    tasks); "tests the next day take precedence."
-9. Travel time to first class (needs a maps API).
+8. Travel time to first class (needs a maps API).
+9. Maybe: a Canvas access token for submission status (the feed doesn't say
+   what's submitted), if Illinois allows student tokens.
 10. Shelved for now: a character for the assistant (pickle, owl, or cat
     concepts were shown 2026-10-21).
 
@@ -156,6 +159,13 @@ numbers are the resume evidence Dylan wants.
 
 ## Problems
 
+- **2026-10-22 — Canvas saved every Italian assignment twice.** The feed names
+  courses with codes like "ital_101_120268_264325", which didn't match the
+  saved "ITAL 101", so the duplicate check (which only compares within a
+  course) saw new assignments, and the copies were marked Open. Found by
+  looking at the data after Dylan's first check. Fixed by reading course codes
+  from any spelling ("ITAL 101", "ital_101_...", "ITAL101") and comparing
+  courses by code; removed the 8 copies and renamed the courses.
 - **2026-10-22 — Restart loop.** Watch mode restarted the server endlessly:
   each start wrote `dist/app.js`, and Node's watcher on Windows reacted to it
   even though `dist/` wasn't watched (found by logging every file event).

@@ -224,6 +224,38 @@ button:disabled {
   color: var(--danger);
 }
 
+/* Canvas */
+.canvas-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+}
+
+.canvas-bar.card {
+  display: block;
+}
+
+.canvas-bar input {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--page);
+  color: var(--text);
+  font: inherit;
+}
+
+button.link {
+  border: none;
+  background: none;
+  color: var(--muted);
+  text-decoration: underline;
+  padding: 8px 4px;
+}
+
 /* Review */
 .review {
   margin-top: 16px;

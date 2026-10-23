@@ -5,6 +5,7 @@
 // Rows whose screenshot didn't show a course get one inferred first.
 import { choice, noul, TypeSafeClient } from "@typesafe-ai/sdk";
 import {
+  courseCode,
   shortDate,
   STATUS_LABELS,
   type Match,
@@ -24,9 +25,12 @@ export function normalizeName(name: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
+/** One key per course however it's spelled ("ITAL 101", "ital_101_…"). */
+const courseKey = (course: string) => normalizeName(courseCode(course));
+
 /** An empty course means the screenshot didn't show one, so it can match any. */
 const coursesFit = (a: string, b: string) =>
-  !a || !b || normalizeName(a) === normalizeName(b);
+  !a || !b || courseKey(a) === courseKey(b);
 
 const datesClose = (a: string | null, b: string | null) =>
   a && b ? Math.abs(Date.parse(a) - Date.parse(b)) <= DAY_MS : a === b;
@@ -159,7 +163,7 @@ export function courseExamples(saved: SavedAssignment[]): CourseExamples[] {
   const courses = new Map<string, CourseExamples>();
   for (const assignment of saved) {
     if (!assignment.course || assignment.ignored) continue;
-    const key = normalizeName(assignment.course);
+    const key = courseKey(assignment.course);
     const entry = courses.get(key) ?? {
       course: assignment.course,
       examples: [],

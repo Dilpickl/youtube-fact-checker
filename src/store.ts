@@ -70,6 +70,10 @@ export function openStore(path: string) {
     minutes INTEGER NOT NULL,
     logged_at TEXT NOT NULL
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )`);
   const find = (id: number) => {
     const record = db
       .prepare("SELECT * FROM assignments WHERE id = ?")
@@ -200,6 +204,24 @@ export function openStore(path: string) {
         "UPDATE assignments SET estimate_minutes = ? WHERE id = ?",
       );
       for (const [id, minutes] of estimates) update.run(minutes, id);
+    },
+
+    getSetting(key: string): string | null {
+      const row = db
+        .prepare("SELECT value FROM settings WHERE key = ?")
+        .get(key) as { value: string } | undefined;
+      return row?.value ?? null;
+    },
+
+    /** Saves a setting, or removes it when given null. */
+    setSetting(key: string, value: string | null): void {
+      if (value === null) {
+        db.prepare("DELETE FROM settings WHERE key = ?").run(key);
+      } else {
+        db.prepare(
+          "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        ).run(key, value);
+      }
     },
 
     close(): void {

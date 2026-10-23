@@ -25,7 +25,8 @@ ANTHROPIC_API_KEY=...
 npm start
 ```
 
-Then open http://localhost:3000. The server rebuilds the page and restarts by
+Then open http://localhost:3000. On **Plan**, add assignments with a
+screenshot (button, paste, or drag) or connect your Canvas calendar feed. The server rebuilds the page and restarts by
 itself whenever a file in `src/` or `web/` changes; refresh the browser to see
 it. Saved assignments live in `data/assignments.db` (Git ignores it).
 
@@ -35,8 +36,8 @@ it. Saved assignments live in `data/assignments.db` (Git ignores it).
 npm run import -- test/fixtures/connect-capitolo5.png
 ```
 
-Prints each assignment found, with its due date and whether it's still open.
-Rows marked `CHECK THIS` are ones the two models didn't agree on.
+Prints each assignment found, with its due date, status, and any flag where
+the two models disagreed (for example "Check the date").
 
 ## Develop
 
