@@ -8,6 +8,7 @@ import {
   type GuessCourse,
   type Judges,
   type JudgeSame,
+  withoutFinishedNew,
 } from "../src/match.ts";
 
 const imported = (
@@ -232,5 +233,47 @@ test("never asks about left-out or undated rows", async () => {
   assert.deepEqual(
     rows.map((row) => row.match.kind),
     ["new", "new"],
+  );
+});
+
+// Dylan's pasted ENG 100 page showed "eng_100", which would have renamed the
+// saved "ENG 100" assignments on save.
+test("writes every imported course as its code", async () => {
+  const [row] = await reviewImport(
+    [imported({ name: "A&P Class 17", course: "eng_100" })],
+    [saved({ name: "A&P Class 17", course: "ENG 100" })],
+    judges(),
+  );
+  assert.equal(row.course, "ENG 100");
+  assert.equal(row.match.kind, "same");
+});
+
+// The same page brought in 22 past, closed assignments as new.
+test("skips new rows that are already finished, but keeps updates", async () => {
+  const rows = await reviewImport(
+    [
+      imported({
+        name: "A&P Class 13",
+        status: "closed",
+        dueAt: "2026-10-01T23:59:00-05:00",
+      }),
+      imported({ name: "Strutture III- 5", status: "closed" }),
+      imported({
+        name: "GP1",
+        status: "open",
+        dueAt: "2026-10-30T23:59:00-05:00",
+      }),
+    ],
+    [saved({})],
+    judges(),
+  );
+  const result = withoutFinishedNew(rows);
+  assert.equal(result.skipped, 1);
+  assert.deepEqual(
+    result.rows.map((row) => [row.name, row.match.kind]),
+    [
+      ["Strutture III- 5", "same"],
+      ["GP1", "new"],
+    ],
   );
 });

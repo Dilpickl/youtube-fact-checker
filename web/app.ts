@@ -58,6 +58,8 @@ const state = {
   openRows: new Set<number>(),
   /** The "Course for rows without one" box in the review. */
   bulkCourse: "",
+  /** New rows left out of the review because they're already finished. */
+  reviewSkipped: 0,
   /** Where the rows under review came from. */
   reviewSource: "screenshot" as "screenshot" | "canvas" | "page",
 };
@@ -181,7 +183,7 @@ async function ensureEstimates() {
 /** Shared by screenshots and pasted pages: read, then open the review. */
 async function runImport(
   source: "screenshot" | "page",
-  request: () => Promise<{ rows: ReviewRow[] }>,
+  request: () => Promise<{ rows: ReviewRow[]; skipped: number }>,
 ) {
   if (state.drafts) {
     state.notice = {
@@ -196,12 +198,19 @@ async function runImport(
   state.notice = null;
   render();
   try {
-    const { rows } = await request();
+    const { rows, skipped } = await request();
+    state.reviewSkipped = skipped;
     if (rows.length === 0) {
-      state.notice = {
-        text: `No assignments found in that ${source}. Try one that shows assignment names and due dates.`,
-        kind: "error",
-      };
+      state.notice =
+        skipped > 0
+          ? {
+              text: `Everything in that ${source} is already finished or past, so there's nothing new to add.`,
+              kind: "good",
+            }
+          : {
+              text: `No assignments found in that ${source}. Try one that shows assignment names and due dates.`,
+              kind: "error",
+            };
     } else {
       state.drafts = rows.map((row) => ({ ...row, sameAnswer: null }));
       state.openRows.clear();
@@ -1116,6 +1125,9 @@ function renderReview(drafts: Draft[]): HTMLElement {
           ? "Assignments found in the page you pasted. "
           : "Assignments found in your screenshot. ",
       "Save now, or open any row to fix it. Unticked rows are skipped in later imports too.",
+      state.reviewSource !== "canvas" &&
+        state.reviewSkipped > 0 &&
+        ` Skipped ${state.reviewSkipped} finished or past assignment${state.reviewSkipped === 1 ? "" : "s"}.`,
     ),
     actions(),
     kept.some(({ draft }) => !draft.course.trim()) && renderBulkCourse(drafts),

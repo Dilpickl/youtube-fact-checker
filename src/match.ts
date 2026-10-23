@@ -77,7 +77,12 @@ export async function reviewImport(
   saved: SavedAssignment[],
   judges: Judges,
 ): Promise<ReviewRow[]> {
-  const rows = await fillCourses(imported, saved, judges.course);
+  // "eng_100" from a Canvas page and "ENG 100" elsewhere are one course.
+  const named = imported.map((row) => ({
+    ...row,
+    course: courseCode(row.course),
+  }));
+  const rows = await fillCourses(named, saved, judges.course);
   const exact = rows.map((row) => findExact(row, saved));
 
   const pairs: (CandidatePair & { row: number })[] = [];
@@ -128,6 +133,21 @@ export async function reviewImport(
       match,
     };
   });
+}
+
+/**
+ * Leaves out new rows that are already finished on the site (past and closed,
+ * or scored): there's nothing to do on them. Closed rows that update something
+ * saved still come through.
+ */
+export function withoutFinishedNew(rows: ReviewRow[]): {
+  rows: ReviewRow[];
+  skipped: number;
+} {
+  const kept = rows.filter(
+    (row) => !(row.match.kind === "new" && row.status === "closed"),
+  );
+  return { rows: kept, skipped: rows.length - kept.length };
 }
 
 /**

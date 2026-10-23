@@ -29,6 +29,7 @@ import {
   reviewImport,
   typeSafeGuessCourse,
   typeSafeJudgeSame,
+  withoutFinishedNew,
 } from "./match.ts";
 import { openStore, type Store } from "./store.ts";
 
@@ -181,9 +182,11 @@ async function route(
     const bytes = await readBody(request);
     try {
       const rows = await services.readScreenshot(bytes);
-      sendJson(response, 200, {
-        rows: await services.match(rows, store.list()),
-      });
+      sendJson(
+        response,
+        200,
+        withoutFinishedNew(await services.match(rows, store.list())),
+      );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new HttpError(502, `Couldn't read that screenshot: ${reason}`);
@@ -211,9 +214,11 @@ async function route(
     }
     try {
       const rows = await services.readText(text);
-      sendJson(response, 200, {
-        rows: await services.match(rows, store.list()),
-      });
+      sendJson(
+        response,
+        200,
+        withoutFinishedNew(await services.match(rows, store.list())),
+      );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new HttpError(502, `Couldn't read that page: ${reason}`);

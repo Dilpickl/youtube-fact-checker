@@ -62,21 +62,24 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
 
 ## Next
 
-1. Class schedule and time available; also feeds the Today itinerary and the
+1. **Overview tab:** one card per class (next 3 assignments, a one-line status,
+   "+N more"), and a month calendar with a color per course; clicking a day
+   lists what's due. Easy to read, not cluttered (Dylan's ask).
+2. Class schedule and time available; also feeds the Today itinerary and the
    debriefs.
-2. Focus timer: records real time spent (sessions currently log the planned
+3. Focus timer: records real time spent (sessions currently log the planned
    minutes).
-3. Learning: compare real times with estimates, adjust per course; learn which
+4. Learning: compare real times with estimates, adjust per course; learn which
    hours Dylan focuses best; tune session sizes.
-4. Discord bot: add tasks by message or photo, "what now?", morning debrief
+5. Discord bot: add tasks by message or photo, "what now?", morning debrief
    (due today, keeping up, first class, weather).
-5. Evening "prep for tomorrow" debrief.
-6. Exams: dated exams become study sessions (the scheduler already splits big
+6. Evening "prep for tomorrow" debrief.
+7. Exams: dated exams become study sessions (the scheduler already splits big
    tasks); "tests the next day take precedence."
-7. Travel time to first class (needs a maps API).
-8. Maybe: a Canvas access token for submission status (the feed doesn't say
+8. Travel time to first class (needs a maps API).
+9. Maybe: a Canvas access token for submission status (the feed doesn't say
    what's submitted), if Illinois allows student tokens.
-9. Shelved for now: a character for the assistant (pickle, owl, or cat
+10. Shelved for now: a character for the assistant (pickle, owl, or cat
     concepts were shown 2026-10-21).
 
 **Reminder for Claude:** once import works, build a test set of real
@@ -177,6 +180,11 @@ numbers are the resume evidence Dylan wants.
   "optional" kind left out by default. Re-run on the same screenshots: physics
   and math statuses and dates all right. Advice recorded: screenshots for pages
   that show progress as bars or scores, text for pages that say it in words.
+- **2026-10-23 — Past work and "eng_100" from a pasted Canvas page.** Dylan
+  pasted the ENG 100 assignments page: 22 past, closed assignments came in as
+  new, and the course read "eng_100" (saving would have renamed ENG 100).
+  Imports now skip new rows that are already finished (the review says how
+  many), and every import writes courses as codes.
 - **2026-10-23 — "Same assignment as Chapter 1?"** A left-out row with no course
   or date paired with anything undated. Fuzzy matching now skips left-out rows
   and needs both due dates.
