@@ -224,6 +224,249 @@ button:disabled {
   color: var(--danger);
 }
 
+/* Overview */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  border-radius: 0;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.course-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.course-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.course-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.course-head h2 {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+.course-status {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.course-status.danger,
+.when.overdue {
+  color: var(--danger);
+}
+
+.course-status.good {
+  color: var(--good-text);
+}
+
+.course-card ul,
+.day-list ul {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-card li,
+.day-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+#overview-search {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+}
+
+.course-card li,
+.day-list li {
+  flex-wrap: wrap;
+}
+
+.item-button {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.item-button:hover {
+  text-decoration: underline;
+}
+
+.item-button.later {
+  color: var(--muted);
+}
+
+.item-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 0 2px;
+}
+
+.course-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.course-item.later {
+  color: var(--muted);
+}
+
+.later-note {
+  font-size: 0.85rem;
+}
+
+.course-card .when,
+.day-list .when {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.cal-head h2 {
+  margin: 0;
+  min-width: 9.5em;
+  text-align: center;
+}
+
+button.icon {
+  min-width: 40px;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.cal-weekday {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 56px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.cal-day.empty {
+  border: none;
+  background: none;
+}
+
+.cal-day.today .cal-date {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.cal-day.selected {
+  border: 2px solid var(--accent);
+}
+
+.cal-date {
+  font-size: 0.85rem;
+}
+
+.cal-dots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+
+.cal-dots .dot {
+  width: 8px;
+  height: 8px;
+  margin: 0;
+}
+
+.cal-more {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.day-list {
+  margin-top: 16px;
+}
+
+.day-list h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.day-list li {
+  justify-content: flex-start;
+}
+
 /* Paste text or link */
 .paste-box {
   margin-top: 16px;

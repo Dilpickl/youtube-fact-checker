@@ -17,6 +17,14 @@ import {
   type WorkItem,
 } from "../src/now.ts";
 import { buildHistory, formatMinutes } from "../src/history.ts";
+import {
+  courseColors,
+  courseStatus,
+  dueOn,
+  matchesQuery,
+  monthGrid,
+  summarizeCourses,
+} from "../src/overview.ts";
 import { buildPlan } from "../src/plan.ts";
 
 interface Notice {
@@ -54,6 +62,18 @@ const state = {
   canvasDraft: "",
   canvasError: null as string | null,
   checkingCanvas: false,
+  overviewView: "courses" as "courses" | "calendar",
+  /** Course cards opened past their first three assignments. */
+  expandedCourses: new Set<string>(),
+  calendarMonth: {
+    year: new Date().getFullYear(),
+    month: new Date().getMonth(),
+  },
+  selectedDay: new Date(),
+  /** What's typed in Overview's "Find an assignment" box. */
+  overviewQuery: "",
+  /** The assignment opened on Overview to show its Mark done button. */
+  openItem: null as number | null,
   /** Review rows opened for editing, by position in the review. */
   openRows: new Set<number>(),
   /** The "Course for rows without one" box in the review. */
@@ -965,6 +985,305 @@ function list(
   );
 }
 
+// ---- Overview ----
+
+/** "Sat 25" this week and next, "Nov 8" further out. */
+function shortDay(iso: string): string {
+  const date = new Date(iso);
+  const days = (date.getTime() - Date.now()) / 86_400_000;
+  if (days > -7 && days < 7) {
+    const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
+    return `${weekday} ${date.getDate()}`;
+  }
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+const dot = (color: string) =>
+  el("span", {
+    class: "dot",
+    style: `background: ${color}`,
+    "aria-hidden": "true",
+  });
+
+function renderOverview(): Node[] {
+  if (state.loadFailed || !state.assignments) return renderSchedule();
+  const toggle = (view: "courses" | "calendar", label: string) => {
+    const control = button(label, () => {
+      state.overviewView = view;
+      render();
+    });
+    control.setAttribute("aria-pressed", String(state.overviewView === view));
+    return control;
+  };
+  const search = el("input", {
+    id: "overview-search",
+    type: "search",
+    placeholder: "Find an assignment or course",
+    "aria-label": "Find an assignment or course",
+  });
+  search.value = state.overviewQuery;
+  search.addEventListener("input", () => {
+    state.overviewQuery = search.value;
+    render();
+    // Re-rendering replaces the box, so put the cursor back where it was.
+    const again = document.querySelector<HTMLInputElement>("#overview-search");
+    again?.focus();
+    again?.setSelectionRange(again.value.length, again.value.length);
+  });
+  const matching = state.assignments.filter((a) =>
+    matchesQuery(a, state.overviewQuery),
+  );
+  const colors = courseColors(state.assignments);
+  return [
+    el(
+      "div",
+      { class: "plan-header" },
+      el("h1", {}, "Overview"),
+      el(
+        "div",
+        { class: "segmented", role: "group", "aria-label": "View" },
+        toggle("courses", "By course"),
+        toggle("calendar", "Calendar"),
+      ),
+    ),
+    el("p", { class: "hint muted" }, "Click an assignment to mark it done."),
+    search,
+    state.notice ? renderNotice(state.notice) : el("span"),
+    state.overviewView === "courses"
+      ? renderCourseCards(matching)
+      : renderCalendar(matching, colors),
+  ];
+}
+
+/** An assignment row that opens, on click, to show a Mark done button. */
+function overviewItem(
+  assignment: SavedAssignment,
+  when: string,
+  options: { color?: string; overdue?: boolean; showCourse?: boolean } = {},
+): HTMLElement {
+  const open = state.openItem === assignment.id;
+  const later = assignment.status === "not_open_yet";
+  const name = el(
+    "button",
+    {
+      class: later ? "item-button later" : "item-button",
+      "aria-expanded": String(open),
+    },
+    assignment.name,
+    later && el("span", { class: "later-note" }, " · not open yet"),
+    options.showCourse
+      ? el("span", { class: "muted" }, ` · ${assignment.course || "No course"}`)
+      : null,
+  );
+  name.addEventListener("click", () => {
+    state.openItem = open ? null : assignment.id;
+    render();
+  });
+  return el(
+    "li",
+    { class: open ? "open" : "" },
+    options.color ? dot(options.color) : null,
+    name,
+    el("span", { class: options.overdue ? "when overdue" : "when" }, when),
+    open &&
+      el(
+        "div",
+        { class: "item-actions" },
+        button(
+          "Mark done",
+          () => {
+            state.openItem = null;
+            void markDone(assignment);
+          },
+          "primary",
+        ),
+        button("Cancel", () => {
+          state.openItem = null;
+          render();
+        }),
+      ),
+  );
+}
+
+function renderCourseCards(assignments: SavedAssignment[]): HTMLElement {
+  const summaries = summarizeCourses(assignments, new Date());
+  const searching = state.overviewQuery.trim() !== "";
+  if (summaries.length === 0 && searching) {
+    return el(
+      "p",
+      { class: "muted", style: "margin-top: 16px" },
+      `No assignments still to do match "${state.overviewQuery.trim()}".`,
+    );
+  }
+  if (summaries.length === 0) {
+    return el(
+      "div",
+      { class: "card", style: "margin-top: 16px" },
+      el("h2", { style: "margin-top: 0" }, "Nothing to do"),
+      el(
+        "p",
+        { class: "muted" },
+        "Every saved assignment is done. Add more on your Plan.",
+      ),
+    );
+  }
+  return el(
+    "div",
+    { class: "course-cards" },
+    ...summaries.map((summary) => {
+      const status = courseStatus(summary);
+      const items = [
+        ...summary.overdue,
+        ...summary.upcoming,
+        ...summary.undated,
+      ];
+      // Searching shows every match; otherwise the next three.
+      const expanded = searching || state.expandedCourses.has(summary.course);
+      const shown = expanded ? items : items.slice(0, 3);
+      const rows = shown.map((assignment) =>
+        overviewItem(
+          assignment,
+          assignment.dueAt ? shortDay(assignment.dueAt) : "No date",
+          { overdue: summary.overdue.includes(assignment) },
+        ),
+      );
+      const more = searching ? 0 : items.length - 3;
+      return el(
+        "section",
+        { class: "course-card" },
+        el(
+          "div",
+          { class: "course-head" },
+          el("h2", {}, dot(summary.color), summary.course || "No course"),
+          el("span", { class: `course-status ${status.tone}` }, status.text),
+        ),
+        el("ul", {}, ...rows),
+        more > 0 &&
+          button(
+            expanded ? "Show less" : `+${more} more`,
+            () => {
+              if (expanded) state.expandedCourses.delete(summary.course);
+              else state.expandedCourses.add(summary.course);
+              render();
+            },
+            "link",
+          ),
+      );
+    }),
+  );
+}
+
+function renderCalendar(
+  assignments: SavedAssignment[],
+  colors: Map<string, string>,
+): HTMLElement {
+  const { year, month } = state.calendarMonth;
+  const today = new Date();
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  const moveMonth = (by: number) => {
+    const next = new Date(year, month + by, 1);
+    state.calendarMonth = { year: next.getFullYear(), month: next.getMonth() };
+    render();
+  };
+
+  const weeks = monthGrid(year, month).map((week) =>
+    week.map((day) => {
+      if (!day) return el("div", { class: "cal-day empty" });
+      const due = dueOn(assignments, day);
+      const cell = el(
+        "button",
+        {
+          class: [
+            "cal-day",
+            sameDay(day, today) ? "today" : "",
+            sameDay(day, state.selectedDay) ? "selected" : "",
+          ].join(" "),
+          "aria-label": `${day.toLocaleDateString("en-US", { month: "long", day: "numeric" })}, ${due.length} due`,
+        },
+        el("span", { class: "cal-date" }, String(day.getDate())),
+        el(
+          "span",
+          { class: "cal-dots" },
+          ...due.slice(0, 3).map((a) => dot(colors.get(a.course)!)),
+          due.length > 3 &&
+            el("span", { class: "cal-more" }, `+${due.length - 3}`),
+        ),
+      );
+      cell.addEventListener("click", () => {
+        state.selectedDay = day;
+        render();
+      });
+      return cell;
+    }),
+  );
+
+  const selected = dueOn(assignments, state.selectedDay);
+  const selectedLabel = state.selectedDay.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+  return el(
+    "div",
+    { class: "calendar" },
+    el(
+      "div",
+      { class: "cal-head" },
+      button("‹", () => moveMonth(-1), "icon"),
+      el(
+        "h2",
+        {},
+        new Date(year, month, 1).toLocaleDateString("en-US", {
+          month: "long",
+          year: "numeric",
+        }),
+      ),
+      button("›", () => moveMonth(1), "icon"),
+      button(
+        "Today",
+        () => {
+          state.calendarMonth = {
+            year: today.getFullYear(),
+            month: today.getMonth(),
+          };
+          state.selectedDay = today;
+          render();
+        },
+        "link",
+      ),
+    ),
+    el(
+      "div",
+      { class: "cal-grid" },
+      ...["S", "M", "T", "W", "T", "F", "S"].map((d) =>
+        el("span", { class: "cal-weekday" }, d),
+      ),
+      ...weeks.flat(),
+    ),
+    el(
+      "section",
+      { class: "card day-list" },
+      el("h3", {}, selectedLabel),
+      selected.length === 0
+        ? el("p", { class: "muted" }, "Nothing due.")
+        : el(
+            "ul",
+            {},
+            ...selected.map((a) =>
+              overviewItem(
+                a,
+                new Date(a.dueAt!).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                }),
+                { color: colors.get(a.course), showCourse: true },
+              ),
+            ),
+          ),
+    ),
+  );
+}
+
 // ---- History ----
 
 function renderHistory(): Node[] {
@@ -1312,17 +1631,18 @@ function renderAsk(draft: Draft, savedName: string, index: number) {
 // ---- Wiring ----
 
 function render() {
-  const page =
-    location.hash === "#plan"
-      ? "plan"
-      : location.hash === "#history"
-        ? "history"
-        : "now";
+  const pages = {
+    now: renderNow,
+    plan: renderPlan,
+    overview: renderOverview,
+    history: renderHistory,
+  };
+  const requested = location.hash.slice(1);
+  const page = requested in pages ? (requested as keyof typeof pages) : "now";
   for (const link of document.querySelectorAll<HTMLAnchorElement>("nav a")) {
     if (link.dataset.page === page) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
-  const pages = { now: renderNow, plan: renderPlan, history: renderHistory };
   app.replaceChildren(...pages[page]());
 }
 

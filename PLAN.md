@@ -59,12 +59,15 @@ Design rules, agreed 2026-10-19 and 2026-10-20:
   text and physics by screenshot; both led to the accuracy fixes below. The
   compact review (Save first, questions first, one-line rows) is not yet tried
   by Dylan; their physics and math rows were removed to re-import.
+- 2026-10-27: Overview tab. One card per class (next 3, a one-line status,
+  "+N more") or a month calendar with a color per course; a search box; click
+  any assignment to Mark done (with Undo).
 
 ## Next
 
-1. **Overview tab:** one card per class (next 3 assignments, a one-line status,
-   "+N more"), and a month calendar with a color per course; clicking a day
-   lists what's due. Easy to read, not cluttered (Dylan's ask).
+1. **New look for the whole app** (from Veeresh's feedback on 10/27: "it could
+   be designed to look better"). Dylan: Now shows only the "What now?" card,
+   and the style should be distinctive, not close to the default look.
 2. Class schedule and time available; also feeds the Today itinerary and the
    debriefs.
 3. Focus timer: records real time spent (sessions currently log the planned
