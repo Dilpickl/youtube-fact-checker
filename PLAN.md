@@ -25,14 +25,22 @@ videos):
 
 ## Done
 
-(nothing yet on YouTube)
+- 2026-11-02: Accuracy check before building the interface (`eval/`,
+  `eval/RESULTS.md`). Opus 5.5 with web search on Kurzgesagt, a seed-oil
+  health video, and a PBS news clip, 10 claims each: 28 of 29 gradable
+  verdicts right, one too soft. Graded by Claude, not yet reviewed by Dylan.
 
 ## Next
 
-1. **Current milestone: claims from a YouTube video.** Read the captions of the
-   video being watched and find its checkable claims with TypeSafe behind a
-   small server endpoint. What done looks like: to be agreed with Dylan before
-   building. The TikTok reader (`src/tiktok.ts`) is replaced by a YouTube one;
+1. **Current milestone: claims from a YouTube video.** A toggle beside the
+   video controls, always visible: "Finding claims…", then "14 claims",
+   "Nothing to check", "No captions", or "Couldn't check: retry". Clicking it
+   opens a list beside the video (short claim, time; click to jump); clicking
+   again hides it. Statistics and forecasts count; opinions and jokes don't.
+   Finish line drafted 2026-11-02; Dylan hasn't confirmed it yet. Open
+   question from Dylan: show verdicts live, when a claim is spoken.
+   Before more checking runs: the Anthropic credits ran out on 2026-11-02.
+   Then try cheaper models on the same three videos. The TikTok reader (`src/tiktok.ts`) is replaced by a YouTube one;
    the caption parsing and extension plumbing carry over.
 2. On-demand checking: Google Fact Check Tools API, then web evidence, then
    per-source supports/contradicts judgments.
@@ -54,6 +62,12 @@ reminder on 2026-10-12.
 
 ## Decisions
 
+- **2026-11-02 — Test verdict quality before building the interface.** Claude
+  suggested it (the biggest unknown is whether verdicts are any good); Dylan
+  agreed and asked for health-influencer and news videos besides Kurzgesagt,
+  since a Kurzgesagt video is a good answer key but not one people doubt. A
+  toggle that's always visible and says "Nothing to check" was Dylan's call,
+  over hiding it on videos with no claims.
 - **2026-11-02 — YouTube first, any topic, desktop.** Dylan wants to focus on
   desktop, where YouTube is far more practical than TikTok. A share-to-Discord
   bot was considered and dropped: Dylan pointed out people could just share a
@@ -122,6 +136,15 @@ reminder on 2026-10-12.
 
 ## Problems
 
+- **2026-11-02 — YouTube guards its captions.** Fetching a video's caption
+  file or transcript from outside the page returns nothing (it needs a token
+  the player adds). Inside the page it works: the player's own caption request
+  carries the token, and so does YouTube's "Show transcript" panel. The
+  extension will read captions from inside the page.
+- **2026-11-02 — Verdicts from memory.** With 12 checks at once, about a third
+  of web searches failed and the model answered from memory; those were the
+  wrong verdicts. The script now runs two at a time, retries, and reports
+  failed searches. Rule for the app: no source, no verdict.
 - **2026-10-12 — Couldn't confirm caption field names.** Both videos inspected
   live were music-only, and then TikTok showed a CAPTCHA, which Claude does not
   solve. Caption parsing uses field names from earlier TikTok pages and accepts

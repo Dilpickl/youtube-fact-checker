@@ -69,3 +69,15 @@ The script and timing live in `promo/src/timeline.ts`; the soundtrack is
 synthesized by `promo/scripts/soundtrack.ts` from the same timeline, so sound
 effects stay in sync when timing changes. Rendering needs Google Chrome
 installed (see `promo/remotion.config.ts`).
+
+## Accuracy check
+
+`eval/check.ts` finds the checkable claims in a saved transcript and checks
+each one with Claude and web search, writing a report to `eval/results/`. It
+needs `ANTHROPIC_API_KEY` in `.env` and costs about $1.25 per video.
+
+```bash
+npm run check-claims -- eval/transcripts/<name>.txt
+```
+
+Transcripts are kept out of Git; results and grades are in `eval/RESULTS.md`.

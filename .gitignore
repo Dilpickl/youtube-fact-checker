@@ -21,3 +21,6 @@ promo/public/soundtrack.wav
 
 # Saved assignments from the shelved schoolwork assistant (personal data)
 data/
+
+# Video transcripts copied for the accuracy check (other people's words; kept local)
+eval/transcripts/
