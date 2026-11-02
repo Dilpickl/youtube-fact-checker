@@ -754,12 +754,6 @@ function renderNow(): Node[] {
         : `Planned ${describeDay(current.plannedStart, now)} through ${describeDay(current.plannedFinish, now)}`;
 
   return page(
-    shareDone &&
-      el(
-        "p",
-        { class: "notice good" },
-        "Today's share is done and everything is on track. You can stop here, or keep going to get ahead.",
-      ),
     card(
       el(
         "p",
@@ -767,19 +761,38 @@ function renderNow(): Node[] {
         tiredItem ? "Something smaller" : eyebrows[current.tier],
       ),
       el("h1", {}, assignment.name),
-      el("p", { class: "muted" }, assignment.course || "No course"),
-      el("p", {}, `Due ${describeWhen(new Date(assignment.dueAt!), now)}`),
+      el(
+        "p",
+        { class: "now-meta" },
+        el(
+          "span",
+          {},
+          dot(courseColors(state.assignments).get(assignment.course)!),
+          assignment.course || "No course",
+        ),
+        el("span", {}, `Due ${describeWhen(new Date(assignment.dueAt!), now)}`),
+        planned && el("span", {}, planned),
+      ),
       el(
         "p",
         { class: "start-by" },
-        partial
-          ? `This session: about ${current.minutes} min (${current.remaining} min left in all)`
-          : `About ${current.minutes} min`,
+        el(
+          "mark",
+          {},
+          partial
+            ? `This session: about ${current.minutes} min`
+            : `About ${current.minutes} min`,
+        ),
+        partial &&
+          el(
+            "span",
+            { class: "muted" },
+            ` · ${current.remaining} min left in all`,
+          ),
       ),
-      planned && el("p", { class: "muted" }, planned),
       el(
         "p",
-        {},
+        { class: "reason" },
         tiredItem
           ? "It's the shortest session on your list."
           : reasons[current.tier],
@@ -824,6 +837,13 @@ function renderNow(): Node[] {
         }),
       ),
     ),
+    // Footnotes under the task, so nothing above it competes for attention.
+    shareDone &&
+      el(
+        "p",
+        { class: "pace good" },
+        "Today's share is done and everything is on track. You can stop here, or keep going to get ahead.",
+      ),
     paceLine,
   );
 }

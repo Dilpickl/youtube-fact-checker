@@ -20,6 +20,7 @@ weekly CS 124 hours), staying focused, and being sleepy while working. A
 classmate can try it from the website link or by joining the Discord server.
 
 Design rules, agreed 2026-10-19 and 2026-10-20:
+
 - One task at a time. "What now?" never shows the full menu; "Not now" skips.
 - Imports are checked before saving: rows TypeSafe doubts get a "Check this"
   flag, and Dylan confirms.
