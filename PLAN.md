@@ -2,49 +2,50 @@
 
 ## The app
 
-An active fact-checker for TikTok. While you watch, a Chrome extension reads the
-video's transcript, finds the checkable factual claims, and (when you ask)
-checks each one against sources: supported, contradicted, misleading, or
-unverified. It also reports signs a video is AI-generated. It's for anyone who
-watches short-form video, which is a broad audience. Dylan wanted a project with
-real-world impact and room for nuance, and wanted to find a good use for
-TypeSafe.
+An active fact-checker for YouTube videos, starting on desktop. While you watch,
+a Chrome extension reads the video's captions, finds the checkable factual
+claims on any topic, and (when you ask) checks each one against sources:
+supported, contradicted, misleading, or unverified. Dylan's test videos:
+informative channels like Kurzgesagt, news channels, and science. Later, a
+hotkey checker for any text on screen uses the same checking server. Dylan
+wanted a project with real-world impact and room for nuance, and wanted to find
+a good use for TypeSafe.
 
-Design rules, agreed 2026-10-12:
+Design rules, agreed 2026-10-12 for TikTok (to revisit for YouTube's longer
+videos):
 
 - Out of the way: no UI when nothing is checkable; otherwise a small button
   just outside the video's corner, anchored to the `<video>` element rather than
-  TikTok's layout.
+  the site's layout.
 - The popover opens beside the video, never over it, and the video pauses while
   it's open.
 - Each claim is judged on its own. No single score for the whole video.
 - "Unverified" and "no signs of AI" are honest answers, not "false" or "real."
-- AI detection reports which signals fired (TikTok's label, caption and hashtags,
-  comments), never a bare "this is AI."
+- AI detection reports which signals fired, never a bare "this is AI."
 
 ## Done
 
-(nothing yet)
+(nothing yet on YouTube)
 
 ## Next
 
-1. **Current milestone: claim detection.** TypeSafe behind a small server
-   endpoint finds the checkable claims in each transcript; the button shows a
-   claim count. What done looks like: to be agreed with Dylan before building.
-   Milestone 1 (transcript and AI label printed in the console) was built
-   2026-10-12 and fixed 2026-10-19, but Dylan never tried it live; Dylan chose
-   to skip that check and go straight here (2026-11-01), so the first live
-   test of this milestone also checks the transcript reading.
-3. On-demand checking: Google Fact Check Tools API, then web evidence, then
+1. **Current milestone: claims from a YouTube video.** Read the captions of the
+   video being watched and find its checkable claims with TypeSafe behind a
+   small server endpoint. What done looks like: to be agreed with Dylan before
+   building. The TikTok reader (`src/tiktok.ts`) is replaced by a YouTube one;
+   the caption parsing and extension plumbing carry over.
+2. On-demand checking: Google Fact Check Tools API, then web evidence, then
    per-source supports/contradicts judgments.
-4. AI-signal section: TikTok label, caption and hashtags, comments.
-5. Audio fallback for videos without captions.
-6. Stretch, after TikTok works well: Android app as a second client to the
-   same endpoint; other platforms.
+3. Hotkey checker: press a key (or drag a box) to check the claims in whatever
+   is on screen, through the same server.
+4. AI signals and an audio fallback for videos without captions, if still
+   wanted.
 
-**Reminder for Claude:** once milestone 3 works end to end, remind Dylan to
-build the test set (20-30 TikToks with known answers) and measure accuracy per
-topic before tuning anything. Dylan asked for this reminder on 2026-10-12.
+**Reminder for Claude:** once on-demand checking works end to end, remind Dylan
+to build the test set (20-30 videos with known answers) and measure accuracy
+per topic before tuning anything. Kurzgesagt publishes a sources document for
+each video, which makes its videos a ready-made answer key. Dylan asked for this
+reminder on 2026-10-12.
 
 ## Done (unverified until Dylan reviews)
 
@@ -53,6 +54,13 @@ topic before tuning anything. Dylan asked for this reminder on 2026-10-12.
 
 ## Decisions
 
+- **2026-11-02 — YouTube first, any topic, desktop.** Dylan wants to focus on
+  desktop, where YouTube is far more practical than TikTok. A share-to-Discord
+  bot was considered and dropped: Dylan pointed out people could just share a
+  link with their own AI app. A universal checker that reads the whole screen
+  automatically was Dylan's idea; Claude raised privacy, cost, and noise, so it
+  becomes a later hotkey checker sharing the same server. Dylan chose any topic
+  over one area (health, money, science) because it's more appealing.
 - **2026-11-01 — Back to the fact-checker.** Dylan switched back because it's
   the more interesting project. The reason for shelving it on 2026-10-19
   (browser extensions aren't one of the listed platforms) is resolved: course

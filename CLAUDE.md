@@ -28,9 +28,9 @@ If the **Project** section below is still empty, this is the first session. Befo
 
 ## Project
 
-- **Vision:** An active fact-checker for TikTok. While Dylan watches, a Chrome extension reads the video's transcript, finds the checkable claims (TypeSafe), and on request checks each against sources: supported, contradicted, misleading, or unverified. It also reports signals that a video is AI-generated. `RESEARCH.md` explains why it is built this way. The schoolwork assistant built 2026-10-19 to 10-27 is shelved at the `schoolwork-assistant` tag.
+- **Vision:** An active fact-checker for YouTube, on desktop first. While Dylan watches, a Chrome extension reads the video's captions, finds the checkable claims on any topic (TypeSafe), and on request checks each against sources: supported, contradicted, misleading, or unverified. Later, a hotkey checker for any text on screen shares the same server. It started as a TikTok checker (the reader is in Git history). `RESEARCH.md` explains why it is built this way. The schoolwork assistant built 2026-10-19 to 10-27 is shelved at the `schoolwork-assistant` tag.
 - **Platform:** Chrome extension (course staff said an extension is OK), plus a small server endpoint for TypeSafe and the language model. A classmate tries it by loading the unpacked extension, or on Dylan's laptop. Stack: TypeScript, esbuild, Node's test runner, Prettier.
-- **Current milestone:** Claim detection: the button shows how many checkable claims a video has. What done looks like is still to be agreed with Dylan. Milestone 1 (transcript and AI label in the console) is built but was never tried live.
+- **Current milestone:** Claims from a YouTube video: read its captions and list the checkable claims. What done looks like is still to be agreed with Dylan.
 
 ## Keeping PLAN.md
 
