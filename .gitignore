@@ -8,11 +8,16 @@
 .externalNativeBuild
 .cxx
 node_modules/
+dist/
 .env
 xcuserdata/
 DerivedData/
 __pycache__/
 .venv/
 
-# Saved assignments (personal data)
+# Promo trailer: rendered output and generated soundtrack (rebuild with npm run render)
+promo/out/
+promo/public/soundtrack.wav
+
+# Saved assignments from the shelved schoolwork assistant (personal data)
 data/

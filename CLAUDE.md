@@ -28,9 +28,9 @@ If the **Project** section below is still empty, this is the first session. Befo
 
 ## Project
 
-- **Vision:** A schoolwork assistant that tells Dylan what to do right now. Assignments come in from screenshots of any course site (a vision language model reads them, TypeSafe checks each row) and later Canvas's calendar feed. "What now?" picks one task with a reason and a start-by time from the deadline, the task's size, and Dylan's energy. A focus timer records real time spent, so estimates improve over time. A Discord bot adds tasks by message or photo from the phone and sends morning and evening debriefs. Judgments use TypeSafe. The earlier TikTok fact-checker is shelved (commit `f1b634d`, `RESEARCH.md`).
-- **Platform:** Website plus a server that also runs a Discord bot. The website covers import review, the week view, progress, and setup; Discord covers quick use from the phone. A classmate tries it from the website link or by joining the Discord server. Stack: TypeScript on Node 24, built-in SQLite, esbuild for the page; hosting not chosen yet.
-- **Current milestone:** To be chosen with Dylan (see Next in PLAN.md). Done so far: screenshot import, the website (Plan, review, saving, merging), "What now?" with a workload-driven plan, the History page, the Canvas calendar feed, and importing by pasted text or link.
+- **Vision:** An active fact-checker for TikTok. While Dylan watches, a Chrome extension reads the video's transcript, finds the checkable claims (TypeSafe), and on request checks each against sources: supported, contradicted, misleading, or unverified. It also reports signals that a video is AI-generated. `RESEARCH.md` explains why it is built this way. The schoolwork assistant built 2026-10-19 to 10-27 is shelved at the `schoolwork-assistant` tag.
+- **Platform:** Chrome extension (course staff said an extension is OK), plus a small server endpoint for TypeSafe and the language model. A classmate tries it by loading the unpacked extension, or on Dylan's laptop. Stack: TypeScript, esbuild, Node's test runner, Prettier.
+- **Current milestone:** Claim detection: the button shows how many checkable claims a video has. What done looks like is still to be agreed with Dylan. Milestone 1 (transcript and AI label in the console) is built but was never tried live.
 
 ## Keeping PLAN.md
 

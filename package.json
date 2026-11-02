@@ -1,25 +1,20 @@
 {
-  "name": "schoolwork-assistant",
+  "name": "video-fact-check",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env --watch-path=src --watch-path=web src/server.ts",
-    "import": "node --env-file=.env src/import-cli.ts",
+    "build": "esbuild src/content.ts src/page-hook.ts src/background.ts --bundle --outdir=extension/dist --target=chrome111",
+    "watch": "npm run build -- --watch",
     "typecheck": "tsc",
     "test": "node --test \"test/**/*.test.ts\"",
-    "format": "prettier --write src test web"
+    "format": "prettier --write src test extension/manifest.json"
   },
   "devDependencies": {
+    "@types/chrome": "^0.3.5",
     "@types/node": "^26.6.5",
     "esbuild": "^0.28.2",
     "prettier": "^3.9.10",
     "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.135.0",
-    "@typesafe-ai/sdk": "^0.7.0",
-    "sharp": "^0.35.5",
-    "zod": "^4.6.7"
   }
 }
