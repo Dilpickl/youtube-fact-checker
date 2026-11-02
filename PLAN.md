@@ -37,8 +37,8 @@ videos):
    "Nothing to check", "No captions", or "Couldn't check: retry". Clicking it
    opens a list beside the video (short claim, time; click to jump); clicking
    again hides it. Statistics and forecasts count; opinions and jokes don't.
-   Finish line drafted 2026-11-02; Dylan hasn't confirmed it yet. Open
-   question from Dylan: show verdicts live, when a claim is spoken.
+   Finish line drafted 2026-11-02; Dylan hasn't confirmed it yet.
+   Later: live verdicts (see Decisions, 2026-11-02).
    Before more checking runs: the Anthropic credits ran out on 2026-11-02.
    Then try cheaper models on the same three videos. The TikTok reader (`src/tiktok.ts`) is replaced by a YouTube one;
    the caption parsing and extension plumbing carry over.
@@ -62,6 +62,13 @@ reminder on 2026-10-12.
 
 ## Decisions
 
+- **2026-11-02 — Live verdicts for red flags only.** Dylan wants a verdict to
+  appear when the claim is spoken. Claude's concern: if every supported claim
+  pops up, people learn to ignore them. Agreed: only contradicted or misleading
+  claims appear live (a small chip by the controls for a few seconds, click for
+  details); supported ones stay in the list and the count. Claims are checked
+  in time order a few minutes ahead of the playhead, so verdicts are ready in
+  time and nothing past where the viewer stops gets paid for.
 - **2026-11-02 — Test verdict quality before building the interface.** Claude
   suggested it (the biggest unknown is whether verdicts are any good); Dylan
   agreed and asked for health-influencer and news videos besides Kurzgesagt,
