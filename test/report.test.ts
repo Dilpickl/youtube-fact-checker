@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MODEL, readClaims, reportSummary } from "../eval/model.ts";
+import { readClaims, reportSummary } from "../eval/report.ts";
+import { MODEL } from "../server/checker.ts";
 
-test("the accuracy check runs on Haiku 5.5", () => {
+test("claims are found and checked with Haiku 5.5", () => {
   assert.equal(MODEL, "claude-haiku-5-5");
 });
 

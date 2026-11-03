@@ -4,7 +4,7 @@
 // how many supported claims it would skip. Usage:
 //   node --env-file=.env eval/filter.ts
 import { readFileSync, writeFileSync } from "node:fs";
-import { readClaims, type ReportClaim } from "./model.ts";
+import { readClaims, type ReportClaim } from "./report.ts";
 
 const VIDEOS = [
   "kurzgesagt-first-civilization",

@@ -8,7 +8,8 @@
     "watch": "npm run build -- --watch",
     "typecheck": "tsc",
     "test": "node --test \"test/**/*.test.ts\"",
-    "format": "prettier --write src test eval/check.ts extension/manifest.json",
+    "format": "prettier --write src server test \"eval/*.ts\" extension/manifest.json",
+    "server": "node --env-file=.env server/main.ts",
     "check-claims": "node --env-file=.env eval/check.ts"
   },
   "devDependencies": {

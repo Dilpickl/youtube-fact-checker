@@ -1,17 +1,25 @@
 # Video Fact Check
 
-A Chrome extension that watches TikTok alongside you: it finds checkable claims
-in what a video says, checks them against sources when you ask, and reports
-signs a video is AI-generated. See `PLAN.md` for where the project stands and
-`RESEARCH.md` for why it is built this way.
+A Chrome extension that fact-checks YouTube videos as you watch: it reads a
+video's captions, finds the checkable claims, and (soon) checks each against
+sources, live. See `PLAN.md` for where the project stands and `RESEARCH.md`
+for why it is built this way.
 
-Current state (milestone 1): when a TikTok video starts playing, the extension
-prints its transcript and TikTok's AI label to the browser console.
+Current state: on a YouTube video, a toggle in the player's controls finds the
+claims worth checking ("Finding claims…", then "9 claims"); clicking it lists
+them beside the video, and clicking a claim jumps to it. Checking them against
+sources comes next.
+
+It has two parts: the extension, and a small server on your own computer that
+holds the Anthropic API key (it can't go inside the extension, where anyone
+could read it) and asks Claude for the claims.
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) 24 or newer (the tests run TypeScript directly)
+- [Node.js](https://nodejs.org/) 24 or newer (it runs TypeScript directly)
 - Google Chrome
+- An Anthropic API key in a `.env` file in this folder:
+  `ANTHROPIC_API_KEY=...` (Git ignores `.env`)
 
 ## Build
 
@@ -23,22 +31,32 @@ npm run build
 The built scripts land in `extension/dist/`. Use `npm run watch` to rebuild on
 every save.
 
+## Run the server
+
+```bash
+npm run server
+```
+
+Leave it running while you watch. It listens only on this computer
+(`http://127.0.0.1:8787`), answers only the extension, and prints what each
+video cost. Finding a video's claims costs well under a cent; it remembers
+them until it stops, so reloading a video doesn't pay again.
+
 ## Load it in Chrome
 
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked** and choose this project's `extension` folder.
 4. After rebuilding, click the reload arrow on the extension's card, then
-   reload the TikTok tab.
+   reload the YouTube tab.
 
 ## Try it
 
-1. Open [tiktok.com](https://www.tiktok.com) and play a video.
-2. Open DevTools (F12) and go to the **Console** tab.
-3. Type `[Fact check]` into the console's filter box.
-
-Each video you watch prints once, with its AI label, caption, on-screen text,
-and transcript.
+Open a YouTube video with captions, such as
+[this seed-oil video](https://www.youtube.com/watch?v=hmkoFDMAvkc). The toggle
+appears next to the settings gear in the player's controls (move the mouse over
+the video to show them). If it says "Couldn't check: retry", hover over it to
+see why; usually the server isn't running.
 
 ## Develop
 
@@ -48,8 +66,9 @@ npm run typecheck  # TypeScript checks
 npm run format     # format with Prettier
 ```
 
-All code that depends on how TikTok's site is built lives in `src/tiktok.ts`.
-When TikTok changes its site, start there.
+Code that depends on how YouTube's site is built lives in `src/page-hook.ts`
+(reading captions through YouTube's player) and `src/content.ts` (where the
+toggle and the list go). When YouTube changes its site, start there.
 
 ## Promo trailer
 
@@ -74,7 +93,8 @@ installed (see `promo/remotion.config.ts`).
 
 `eval/check.ts` finds the checkable claims in a saved transcript and checks
 each one with Claude and web search, writing a report to `eval/results/`. It
-needs `ANTHROPIC_API_KEY` in `.env` and costs about $1.25 per video.
+uses the same prompts as the server (`server/checker.ts`), needs
+`ANTHROPIC_API_KEY` in `.env`, and costs about $0.17 per video with Haiku.
 
 ```bash
 npm run check-claims -- eval/transcripts/<name>.txt

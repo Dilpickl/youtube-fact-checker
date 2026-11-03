@@ -1,33 +1,50 @@
-// The background service worker fetches caption files for content.ts when the
-// caption server refuses requests made from the TikTok page.
-import type { FetchCaptionRequest, FetchCaptionResponse } from "./messages.ts";
-import { isTikTokCaptionUrl } from "./tiktok.ts";
+// The background service worker carries the content script's requests to the
+// local server, which holds the API keys. The content script can't call it
+// itself: its requests count as the YouTube page's, and Chrome keeps web pages
+// away from this computer's own servers.
+import type { FindClaimsRequest, FindClaimsResponse } from "./messages.ts";
+
+// Plain HTTP is fine here: the request never leaves this computer.
+const SERVER = "http://127.0.0.1:8787";
 
 chrome.runtime.onMessage.addListener(
   (
-    message: Partial<FetchCaptionRequest>,
+    message: Partial<FindClaimsRequest>,
     _sender,
-    sendResponse: (response: FetchCaptionResponse) => void,
+    sendResponse: (response: FindClaimsResponse) => void,
   ) => {
-    if (message.type !== "fetchCaption") return false;
-    // The address came from the web page, so only fetch from TikTok's own servers.
-    if (typeof message.url !== "string" || !isTikTokCaptionUrl(message.url)) {
-      sendResponse({ ok: false, error: "not a TikTok caption address" });
-      return false;
-    }
-    void fetchText(message.url).then(sendResponse);
+    if (message.type !== "findClaims") return false;
+    const { videoId, title, transcript } = message;
+    void askServer("/claims", { videoId, title, transcript }).then(
+      sendResponse,
+    );
     return true; // Keeps the channel open until sendResponse is called.
   },
 );
 
-async function fetchText(url: string): Promise<FetchCaptionResponse> {
+async function askServer(
+  path: string,
+  body: object,
+): Promise<FindClaimsResponse> {
+  let response: Response;
   try {
-    const response = await fetch(url, { credentials: "omit" });
-    return response.ok
-      ? { ok: true, text: await response.text() }
-      : { ok: false, error: `the caption server answered ${response.status}` };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: reason };
+    response = await fetch(`${SERVER}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return {
+      ok: false,
+      error:
+        "couldn't reach the fact-check server. Is it running? (npm run server)",
+    };
   }
+  const answer = await response.json().catch(() => ({}));
+  return response.ok
+    ? { ok: true, claims: answer.claims }
+    : {
+        ok: false,
+        error: answer.error ?? `the server answered ${response.status}`,
+      };
 }

@@ -37,19 +37,28 @@ videos):
 - 2026-11-02: TypeSafe filter before searching (`eval/filter.ts`): missed the
   bar. Keeping every flagged claim, it skips only 5 of 22 supported ones; news
   claims all look doubtful to it. Graded by Claude, not yet reviewed by Dylan.
+- 2026-11-03: Claims from a YouTube video (step a of live verdicts). A toggle
+  in the player's controls finds the claims through a server on Dylan's laptop
+  (`npm run server`, Haiku), and a list beside the video jumps to each one.
+  Dylan tried it in Chrome on a PBS video: 10 claims about the primaries. The
+  first load failed until Dylan turned captions on (see Problems); fixed, not
+  yet retried by Dylan.
 
 ## Next
 
-1. **Current milestone: claims from a YouTube video.** A toggle beside the
-   video controls, always visible: "Finding claims…", then "14 claims",
-   "Nothing to check", "No captions", or "Couldn't check: retry". Clicking it
-   opens a list beside the video (short claim, time; click to jump); clicking
-   again hides it. Statistics and forecasts count; opinions and jokes don't.
-   Finish line drafted 2026-11-02; Dylan hasn't confirmed it yet.
-   Later: live verdicts (see Decisions, 2026-11-02).
-   Before more checking runs: the Anthropic credits ran out on 2026-11-02.
-   Then try cheaper models on the same three videos. The TikTok reader (`src/tiktok.ts`) is replaced by a YouTube one;
-   the caption parsing and extension plumbing carry over.
+1. **Current milestone: live verdicts on YouTube.** Finish line agreed with
+   Dylan 2026-11-03: with the local server running, open the seed-oil video
+   and press play. The toggle by the video controls says "Finding claims…",
+   then "10 claims". Around 4:31, where it's said (4:03 in the test
+   transcript's 30-second chunks), a red chip appears ("Contradicted: one
+   serving toxic for 3 years"), stays a few seconds, then fades; clicking it pauses the
+   video and shows the explanation and sources beside the video, never over
+   it. On the Kurzgesagt video, small green checks appear as claims are
+   spoken, and no red chips. Other toggle states: "Nothing to check", "No
+   captions", "Couldn't check: retry". Steps: (a) the claim count and a list
+   of claims (time, click to jump) on a real YouTube video, done 2026-11-03;
+   (b) checks a few minutes ahead of the playhead, chips, and verdicts in the
+   list, in progress.
 2. On-demand checking: Google Fact Check Tools API, then web evidence, then
    per-source supports/contradicts judgments.
 3. Hotkey checker: press a key (or drag a box) to check the claims in whatever
@@ -69,6 +78,24 @@ reminder on 2026-10-12.
   soundtrack. Shows the planned design, labeled "Concept preview."
 
 ## Decisions
+
+- **2026-11-03 — Show every verdict, weighted by how much it matters.**
+  Replaces red flags only (2026-11-02). Dylan's reasoning: a viewer may not
+  know a claim is credible, and that validation is useful too. The evidence
+  agrees: with only false claims flagged, people read unflagged ones as true,
+  even ones nobody checked (the "implied truth effect", Pennycook et al.,
+  2020). So: a red chip for contradicted or misleading; a small, quiet green
+  check for supported; grey for unverified or not checked yet, so no mark
+  never means "true."
+- **2026-11-03 — A server on Dylan's laptop first.** Claude's choice, open to
+  overrule: the API keys can't go inside the extension, where anyone who
+  installs it could read them. Classmates try it on Dylan's laptop; hosting
+  it so anyone can install the extension comes later.
+- **2026-11-03 — Haiku 5.5 checks the claims.** The tuned Haiku matched Opus
+  on 30 claims (one wrong verdict each) at about an eighth of the cost, and
+  Dylan wants a daily tool, so cost matters. Dylan doubted live verdicts were
+  worth paying for at Opus prices; at about 17¢ a video they are the plan. A
+  TypeSafe filter to skip searches was tried and dropped (see Done).
 
 - **2026-11-02 — Live verdicts for red flags only.** Dylan wants a verdict to
   appear when the claim is spoken. Claude's concern: if every supported claim
@@ -151,6 +178,13 @@ reminder on 2026-10-12.
 
 ## Problems
 
+- **2026-11-03 — Captions failed on a video's first load.** YouTube's player
+  ignores caption requests until the video itself plays, and a fresh page
+  usually starts with an ad, so the extension gave up after 10 seconds. It
+  now waits out the ad, asks every few seconds (for up to 10 minutes), and
+  uses the viewer's own caption request if they turn captions on. Claude's
+  tests in its browser pane missed this because those pages were already
+  playing.
 - **2026-11-02 — YouTube guards its captions.** Fetching a video's caption
   file or transcript from outside the page returns nothing (it needs a token
   the player adds). Inside the page it works: the player's own caption request
