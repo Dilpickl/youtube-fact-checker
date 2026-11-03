@@ -1,14 +1,16 @@
 // Accuracy check, run before building the YouTube interface: finds the
 // checkable claims in a saved transcript, checks each one with web search, and
 // writes a report to grade by hand. Usage:
-//   node --env-file=.env eval/check.ts eval/transcripts/<name>.txt
+//   node --env-file=.env eval/check.ts eval/transcripts/<name>.txt [report.md]
+// With an earlier report, checks that report's claims instead of finding new
+// ones, so two models are compared on the same claims.
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { z } from "zod";
+import { MODEL, readClaims, reportSummary } from "./model.ts";
 
-const MODEL = "claude-opus-5-5";
 // ponytail: a fixed cap keeps one run's cost predictable; raise it once the
 // verdicts are known to be worth paying for.
 const MAX_CLAIMS = 10;
@@ -29,7 +31,10 @@ const ClaimsSchema = z.object({
     }),
   ),
 });
-type Claim = z.infer<typeof ClaimsSchema>["claims"][number];
+type Claim = Pick<
+  z.infer<typeof ClaimsSchema>["claims"][number],
+  "time" | "quote" | "claim"
+>;
 
 const VerdictSchema = z.object({
   verdict: z.enum(["supported", "contradicted", "misleading", "unverified"]),
@@ -51,12 +56,12 @@ Return at most ${MAX_CLAIMS} claims, choosing the ones a viewer would most want 
 const CHECK_CLAIM = `You check one claim from a video against sources found with web search.
 
 Verdicts:
-- supported: reliable sources agree with the claim as stated.
+- supported: reliable sources agree with the claim as stated. A rounded number, or one inside the range experts give, is supported; mention the precise figure in the explanation.
 - contradicted: reliable sources say otherwise.
-- misleading: partly true, but missing context changes what a viewer would conclude.
+- misleading: partly true, but a viewer would come away believing something false. A missing qualifier, or a debate among experts the claim takes one mainstream side of, is not enough on its own.
 - unverified: the sources found don't settle it. This is an honest answer, not a failure; prefer it over guessing.
 
-For a forecast, judge whether it matches what experts actually forecast. Prefer primary sources, scientific reviews, and established outlets over blogs. Keep the explanation to two sentences a viewer could read mid-video. List only sources you actually found, each with what it says about the claim.`;
+When the claim is that someone said or reported something, judge whether they said it, not whether it is true. For a forecast, judge whether it matches what experts actually forecast. Prefer primary sources, scientific reviews, and established outlets over blogs. Keep the explanation to two sentences a viewer could read mid-video. List only sources you actually found, each with what it says about the claim.`;
 
 async function findClaims(transcript: string): Promise<Claim[]> {
   const response = await client.messages.parse({
@@ -103,7 +108,8 @@ async function checkOnce(claim: Claim, videoTitle: string) {
         format: zodOutputFormat(VerdictSchema),
       },
       system: CHECK_CLAIM,
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }],
+      // The 2026-02-09 search (with filtering) is for Opus and Sonnet only.
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
       messages,
     });
     addUsage(response.usage);
@@ -160,7 +166,10 @@ if (!path)
 const transcript = readFileSync(path, "utf8");
 const title = transcript.match(/^Title: (.*)$/m)?.[1] ?? basename(path);
 
-const claims = await findClaims(transcript);
+const earlierReport = process.argv[3];
+const claims = earlierReport
+  ? readClaims(readFileSync(earlierReport, "utf8"))
+  : await findClaims(transcript);
 console.log(`${title}: ${claims.length} claims`);
 const verdicts = await mapLimited(claims, PARALLEL_CHECKS, async (claim) => {
   try {
@@ -173,13 +182,11 @@ const verdicts = await mapLimited(claims, PARALLEL_CHECKS, async (claim) => {
   }
 });
 
-// Opus 5.5: $4 per million input tokens, $20 per million output, $10 per 1,000 searches.
-const cost =
-  (totals.input * 4 + totals.output * 20) / 1e6 + totals.searches * 0.01;
+const summary = reportSummary(claims.length, totals, searchErrors);
 const report = [
   `# ${title}`,
   "",
-  `${claims.length} claims · ${totals.searches} searches · ${searchErrors.length} failed searches (${[...new Set(searchErrors)].join(", ") || "none"}) · about $${cost.toFixed(2)}`,
+  summary,
   "",
   ...claims.flatMap((claim, k) => {
     const verdict = verdicts[k];
@@ -200,6 +207,7 @@ const report = [
   }),
 ].join("\n");
 mkdirSync("eval/results", { recursive: true });
-const out = `eval/results/${basename(path, ".txt")}.md`;
+// Named by model, so a cheaper model's run sits beside the Opus reports.
+const out = `eval/results/${basename(path, ".txt")}-${MODEL}.md`;
 writeFileSync(out, report);
-console.log(`Wrote ${out} (about $${cost.toFixed(2)})`);
+console.log(`Wrote ${out}: ${summary}`);

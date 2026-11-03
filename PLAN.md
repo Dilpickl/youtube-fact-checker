@@ -29,6 +29,14 @@ videos):
   `eval/RESULTS.md`). Opus 5.5 with web search on Kurzgesagt, a seed-oil
   health video, and a PBS news clip, 10 claims each: 28 of 29 gradable
   verdicts right, one too soft. Graded by Claude, not yet reviewed by Dylan.
+- 2026-11-02: Haiku 5.5 on the same 30 claims (`eval/RESULTS.md`): about
+  $0.15–0.20 a video instead of $1.24–1.39; 2 verdicts wrong, 5 harsher than
+  needed, 4 better than Opus. After a prompt tune (rounding counts as
+  supported; misleading means a viewer believes something false): 1 wrong
+  (too soft), 2 arguable, $0.14–0.21 a video.
+- 2026-11-02: TypeSafe filter before searching (`eval/filter.ts`): missed the
+  bar. Keeping every flagged claim, it skips only 5 of 22 supported ones; news
+  claims all look doubtful to it. Graded by Claude, not yet reviewed by Dylan.
 
 ## Next
 
