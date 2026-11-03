@@ -91,7 +91,9 @@ false, and "X reported Y" is judged on whether X reported it.
   York Times claim). The four verdicts Haiku did better than Opus held.
 - **Now too soft (1):** "seed oils were developed around 1865 and not meant
   for human consumption" is supported, though its own explanation says it
-  generalizes cottonseed oil to all seed oils. Opus said misleading.
+  generalizes cottonseed oil to all seed oils. Opus said misleading. Dylan
+  agrees it's misleading (2026-11-03): it sounds like a general history of
+  all seed oils, which it isn't.
 - **Arguable (2):** Kushim "considered the first known name" supported (Opus:
   misleading, scholars debate it); seed-oil fats "replace components of cell
   membranes" supported (accurate as written, but the video said membranes).

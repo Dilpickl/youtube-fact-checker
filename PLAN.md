@@ -33,7 +33,7 @@ videos):
   $0.15–0.20 a video instead of $1.24–1.39; 2 verdicts wrong, 5 harsher than
   needed, 4 better than Opus. After a prompt tune (rounding counts as
   supported; misleading means a viewer believes something false): 1 wrong
-  (too soft), 2 arguable, $0.14–0.21 a video.
+  (too soft; Dylan confirmed that one), 2 arguable, $0.14–0.21 a video.
 - 2026-11-02: TypeSafe filter before searching (`eval/filter.ts`): missed the
   bar. Keeping every flagged claim, it skips only 5 of 22 supported ones; news
   claims all look doubtful to it. Graded by Claude, not yet reviewed by Dylan.
