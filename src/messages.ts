@@ -1,5 +1,5 @@
 // Messages passed between the extension's scripts.
-import type { Claim } from "../server/checker.ts";
+import type { Claim, Verdict } from "../server/checker.ts";
 import type { Cue } from "./youtube.ts";
 
 /** Tags messages from page-hook.ts so content.ts ignores anything else posted on the page. */
@@ -23,12 +23,11 @@ export interface ContentMessage {
   type: "readCaptions";
 }
 
-export interface FindClaimsRequest {
-  type: "findClaims";
-  videoId: string;
-  title: string;
-  transcript: string;
-}
+/** What content.ts asks the server, through background.ts. */
+export type ServerRequest =
+  | { type: "findClaims"; videoId: string; title: string; transcript: string }
+  | { type: "checkClaim"; videoId: string; title: string; claim: Claim };
 
-export type FindClaimsResponse =
-  { ok: true; claims: Claim[] } | { ok: false; error: string };
+type Answer<T> = ({ ok: true } & T) | { ok: false; error: string };
+export type FindClaimsResponse = Answer<{ claims: Claim[] }>;
+export type CheckClaimResponse = Answer<{ verdict: Verdict }>;

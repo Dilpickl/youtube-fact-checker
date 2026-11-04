@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, test } from "node:test";
-import { handle } from "../server/main.ts";
+import { handle, queuedCheck, sourcedOnly } from "../server/main.ts";
 
 // These requests are all refused before the language model is called, so the
 // tests spend nothing and need no API key.
@@ -15,8 +15,8 @@ await once(server, "listening");
 const { port } = server.address() as AddressInfo;
 after(() => server.close());
 
-function askForClaims(origin: string, body: object) {
-  return fetch(`http://127.0.0.1:${port}/claims`, {
+function ask(path: string, origin: string, body: object) {
+  return fetch(`http://127.0.0.1:${port}${path}`, {
     method: "POST",
     headers: { Origin: origin, "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -30,15 +30,54 @@ const request = {
 };
 
 test("web pages can't spend credits through the server", async () => {
-  const response = await askForClaims("https://example.com", request);
+  const response = await ask("/claims", "https://example.com", request);
   assert.equal(response.status, 403);
 });
 
 test("an empty transcript is refused before anything is spent", async () => {
-  const response = await askForClaims("chrome-extension://abc", {
+  const response = await ask("/claims", "chrome-extension://abc", {
     ...request,
     transcript: "   ",
   });
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "the transcript is empty" });
+});
+
+test("a claim to check needs its text", async () => {
+  const response = await ask("/check", "chrome-extension://abc", {
+    videoId: "hmkoFDMAvkc",
+    title: "A video",
+    claim: { time: "4:31", quote: "about 3 years", claim: " " },
+  });
+  assert.equal(response.status, 400);
+});
+
+test("no source, no verdict", () => {
+  const fromMemory = {
+    verdict: "contradicted" as const,
+    explanation: "From what I remember, this is false.",
+    sources: [],
+  };
+  assert.equal(sourcedOnly(fromMemory).verdict, "unverified");
+  const sourced = {
+    ...fromMemory,
+    sources: [{ url: "https://a.org", title: "A", says: "No." }],
+  };
+  assert.equal(sourcedOnly(sourced), sourced);
+});
+
+test("at most two checks run at once, in the order they came", async () => {
+  let running = 0;
+  let mostAtOnce = 0;
+  const finished: number[] = [];
+  const check = (id: number) =>
+    queuedCheck(async () => {
+      mostAtOnce = Math.max(mostAtOnce, ++running);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      running--;
+      finished.push(id);
+    });
+  await Promise.all([1, 2, 3, 4, 5].map(check));
+  assert.equal(mostAtOnce, 2);
+  assert.deepEqual(finished, [1, 2, 3, 4, 5]);
 });

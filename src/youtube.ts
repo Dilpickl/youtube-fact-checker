@@ -60,6 +60,28 @@ export function transcriptText(cues: Cue[], lineSeconds = 10): string {
     .join("\n");
 }
 
+/**
+ * When a claim's quote starts: the caption holding its first words, searched
+ * from the claim's line on. Falls back to the line's start when the quote
+ * isn't word for word in the captions.
+ */
+export function quoteStart(cues: Cue[], quote: string, lineStart: number) {
+  const words = (text: string) =>
+    text.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  const opening = words(quote).slice(0, 3);
+  const nearby = cues
+    .filter((cue) => cue.start >= lineStart - 1 && cue.start < lineStart + 30)
+    .flatMap((cue) =>
+      words(cue.text).map((word) => ({ word, start: cue.start })),
+    );
+  if (opening.length === 0) return lineStart;
+  for (let i = 0; i + opening.length <= nearby.length; i++) {
+    if (opening.every((word, k) => nearby[i + k].word === word))
+      return nearby[i].start;
+  }
+  return lineStart;
+}
+
 /** "4:03", or "1:02:03" past an hour. */
 export function formatTime(seconds: number): string {
   const whole = Math.floor(seconds);

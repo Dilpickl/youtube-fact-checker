@@ -1,22 +1,38 @@
 // The server the extension talks to. It holds the Anthropic key, which can't
-// go inside the extension where anyone could read it, and finds the checkable
-// claims in a video's transcript. It only listens on this computer. Run with:
+// go inside the extension where anyone could read it, finds the checkable
+// claims in a video's transcript, and checks each claim with web search. It
+// only listens on this computer. Run with:
 //   npm run server
 import {
   createServer,
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { costOf, findClaims, totals, type Claim } from "./checker.ts";
+import {
+  checkClaim,
+  costOf,
+  findClaims,
+  totals,
+  type Claim,
+  type Verdict,
+} from "./checker.ts";
 
 const PORT = 8787;
 // About six hours of captions, far past any video worth checking claim by claim.
 const MAX_TRANSCRIPT_CHARS = 400_000;
 const MAX_BODY_CHARS = 1_000_000;
+const MAX_CLAIM_CHARS = 1_000;
+// Twelve checks at once made a third of the searches fail, and the model fell
+// back on memory (eval/RESULTS.md); two at a time didn't.
+const PARALLEL_CHECKS = 2;
 
 // ponytail: kept in memory, so reloading a video doesn't pay again, and lost
 // when the server stops; a file or database once people besides Dylan use it.
 const claimsByVideo = new Map<string, Promise<Claim[]>>();
+const verdictsByClaim = new Map<string, Promise<Verdict>>();
+
+type Answer = { status: number; body: object };
+type Route = (body: Record<string, unknown>) => Promise<Answer>;
 
 export async function handle(
   request: IncomingMessage,
@@ -26,8 +42,8 @@ export async function handle(
   const origin = request.headers.origin;
   if (origin && !origin.startsWith("chrome-extension://"))
     return send(response, 403, { error: "only the extension can use this" });
-  if (request.method !== "POST" || request.url !== "/claims")
-    return send(response, 404, { error: "not found" });
+  const route = request.method === "POST" && ROUTES[request.url ?? ""];
+  if (!route) return send(response, 404, { error: "not found" });
 
   let body: unknown;
   try {
@@ -35,46 +51,124 @@ export async function handle(
   } catch {
     return send(response, 400, { error: "the request wasn't valid JSON" });
   }
-  const { videoId, title, transcript } = (body ?? {}) as Record<
-    string,
-    unknown
-  >;
-  if (typeof videoId !== "string" || !/^[\w-]{11}$/.test(videoId))
-    return send(response, 400, { error: "missing or malformed video id" });
-  if (typeof title !== "string" || typeof transcript !== "string")
-    return send(response, 400, { error: "missing title or transcript" });
-  if (!transcript.trim())
-    return send(response, 400, { error: "the transcript is empty" });
-  if (transcript.length > MAX_TRANSCRIPT_CHARS)
-    return send(response, 413, { error: "this video is too long to check" });
+  const answer = await route(
+    typeof body === "object" && body !== null ? { ...body } : {},
+  );
+  send(response, answer.status, answer.body);
+}
 
+const ROUTES: Record<string, Route> = {
+  "/claims": async ({ videoId, title, transcript }) => {
+    if (!isVideoId(videoId)) return refuse("missing or malformed video id");
+    if (typeof title !== "string" || typeof transcript !== "string")
+      return refuse("missing title or transcript");
+    if (!transcript.trim()) return refuse("the transcript is empty");
+    if (transcript.length > MAX_TRANSCRIPT_CHARS)
+      return {
+        status: 413,
+        body: { error: "this video is too long to check" },
+      };
+    try {
+      const claims = await cached(claimsByVideo, videoId, () =>
+        findClaims(`Title: ${title.slice(0, 300)}\n\n${transcript}`),
+      );
+      log(`${claims.length} claims in "${title}"`);
+      return { status: 200, body: { claims } };
+    } catch (error) {
+      return modelFailed(`Finding claims for ${videoId}`, error);
+    }
+  },
+
+  "/check": async ({ videoId, title, claim }) => {
+    if (!isVideoId(videoId)) return refuse("missing or malformed video id");
+    if (typeof title !== "string") return refuse("missing title");
+    const { time, quote, claim: text } = (claim ?? {}) as Partial<Claim>;
+    if (
+      typeof time !== "string" ||
+      typeof quote !== "string" ||
+      typeof text !== "string" ||
+      !text.trim() ||
+      time.length + quote.length + text.length > MAX_CLAIM_CHARS
+    )
+      return refuse("missing or malformed claim");
+    try {
+      const verdict = await cached(verdictsByClaim, `${videoId} ${text}`, () =>
+        queuedCheck(() =>
+          checkClaim({ time, quote, claim: text }, title.slice(0, 300)),
+        ).then(sourcedOnly),
+      );
+      log(`[${time}] ${verdict.verdict}: ${text}`);
+      return { status: 200, body: { verdict } };
+    } catch (error) {
+      return modelFailed(`Checking "${text}"`, error);
+    }
+  },
+};
+
+/** No source, no verdict: one without sources rests on the model's memory. */
+export function sourcedOnly(verdict: Verdict): Verdict {
+  if (verdict.sources.length > 0 || verdict.verdict === "unverified")
+    return verdict;
+  return {
+    verdict: "unverified",
+    explanation: "The web search found no sources to check this against.",
+    sources: [],
+  };
+}
+
+let running = 0;
+const waiting: (() => void)[] = [];
+
+/** Runs a check once fewer than PARALLEL_CHECKS are running, in arrival order. */
+export async function queuedCheck<T>(work: () => Promise<T>): Promise<T> {
+  if (running < PARALLEL_CHECKS) running++;
+  else await new Promise<void>((resolve) => waiting.push(resolve));
   try {
-    const claims = await cachedClaims(
-      videoId,
-      `Title: ${title.slice(0, 300)}\n\n${transcript}`,
-    );
-    console.log(
-      `${claims.length} claims in "${title}" · spent since start: about $${costOf(totals).toFixed(3)}`,
-    );
-    send(response, 200, { claims });
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    console.error(`Finding claims failed for ${videoId}: ${reason}`);
-    send(response, 502, {
-      error: `the language model failed (${reason.slice(0, 200)})`,
-    });
+    return await work();
+  } finally {
+    // Hand the slot straight to the next in line, so no newcomer jumps ahead.
+    const next = waiting.shift();
+    if (next) next();
+    else running--;
   }
 }
 
-function cachedClaims(videoId: string, transcript: string) {
-  let claims = claimsByVideo.get(videoId);
-  if (!claims) {
-    claims = findClaims(transcript);
-    claimsByVideo.set(videoId, claims);
+function cached<T>(
+  cache: Map<string, Promise<T>>,
+  key: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  let result = cache.get(key);
+  if (!result) {
+    result = work();
+    cache.set(key, result);
     // Forget a failure, so trying again asks again.
-    claims.catch(() => claimsByVideo.delete(videoId));
+    result.catch(() => cache.delete(key));
   }
-  return claims;
+  return result;
+}
+
+function isVideoId(value: unknown): value is string {
+  return typeof value === "string" && /^[\w-]{11}$/.test(value);
+}
+
+function refuse(error: string): Answer {
+  return { status: 400, body: { error } };
+}
+
+function modelFailed(what: string, error: unknown): Answer {
+  const reason = error instanceof Error ? error.message : String(error);
+  console.error(`${what} failed: ${reason}`);
+  return {
+    status: 502,
+    body: { error: `the language model failed (${reason.slice(0, 200)})` },
+  };
+}
+
+function log(line: string) {
+  console.log(
+    `${line} · spent since start: about $${costOf(totals).toFixed(3)}`,
+  );
 }
 
 async function readBody(request: IncomingMessage) {

@@ -41,8 +41,16 @@ videos):
   in the player's controls finds the claims through a server on Dylan's laptop
   (`npm run server`, Haiku), and a list beside the video jumps to each one.
   Dylan tried it in Chrome on a PBS video: 10 claims about the primaries. The
-  first load failed until Dylan turned captions on (see Problems); fixed, not
-  yet retried by Dylan.
+  first load failed until Dylan turned captions on (see Problems); fixed, and
+  Dylan confirmed the fix.
+- 2026-11-03: Live verdicts (step b). Claims are checked about three minutes
+  ahead of the playhead, two at a time; chips appear on the video as each is
+  said (red for contradicted or misleading, a quiet green check, grey for
+  unverified or still checking), and the list shows each verdict with its
+  sources. Dylan tried it in Chrome on the PBS video: chips and verdicts
+  worked. About 2.3¢ a check. Open question from Dylan: a "contradicted" for
+  "fast food reuses oil a hundred times" rested on reuse guidelines, not on
+  what restaurants actually do.
 
 ## Next
 
@@ -58,7 +66,8 @@ videos):
    captions", "Couldn't check: retry". Steps: (a) the claim count and a list
    of claims (time, click to jump) on a real YouTube video, done 2026-11-03;
    (b) checks a few minutes ahead of the playhead, chips, and verdicts in the
-   list, in progress.
+   list, done 2026-11-03. Still open: the three-year seed-oil claim came back
+   unverified, not contradicted.
 2. On-demand checking: Google Fact Check Tools API, then web evidence, then
    per-source supports/contradicts judgments.
 3. Hotkey checker: press a key (or drag a box) to check the claims in whatever

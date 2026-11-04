@@ -5,6 +5,7 @@ import {
   parseJson3,
   parseTime,
   pickCaptionTrack,
+  quoteStart,
   transcriptText,
 } from "../src/youtube.ts";
 
@@ -56,4 +57,17 @@ test("claim times read back as seconds", () => {
   assert.equal(parseTime("1:02:05"), 3725);
   assert.equal(parseTime("about four minutes"), null);
   assert.equal(formatTime(243.9), "4:03");
+});
+
+test("a claim's time is when its quote starts, not when its line does", () => {
+  // From the seed-oil video: the three-year claim starts a caption into its line.
+  const cues = [
+    { start: 271.2, text: "oils right it's going to poison us for" },
+    { start: 274.5, text: "about 3 years after just one serving in" },
+    { start: 277.9, text: "cooking oil yeah there's some fascinating" },
+  ];
+  const quote = "about 3 years after just one serving in cooking oil";
+  assert.equal(quoteStart(cues, quote, 271), 274.5);
+  // A quote the model reworded falls back to the line's start.
+  assert.equal(quoteStart(cues, "roughly three years", 271), 271);
 });
