@@ -66,8 +66,9 @@ videos):
    captions", "Couldn't check: retry". Steps: (a) the claim count and a list
    of claims (time, click to jump) on a real YouTube video, done 2026-11-03;
    (b) checks a few minutes ahead of the playhead, chips, and verdicts in the
-   list, done 2026-11-03. Still open: the three-year seed-oil claim came back
-   unverified, not contradicted.
+   list, done 2026-11-03. A prompt tune (2026-11-03) made the three-year
+   seed-oil claim contradicted; the fryer-oil verdict still rests on
+   guidelines (see `eval/RESULTS.md`).
 2. On-demand checking: Google Fact Check Tools API, then web evidence, then
    per-source supports/contradicts judgments.
 3. Hotkey checker: press a key (or drag a box) to check the claims in whatever

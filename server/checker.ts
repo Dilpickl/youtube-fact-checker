@@ -75,9 +75,9 @@ Verdicts:
 - supported: reliable sources agree with the claim as stated. A rounded number, or one inside the range experts give, is supported; mention the precise figure in the explanation.
 - contradicted: reliable sources say otherwise.
 - misleading: partly true, but a viewer would come away believing something false. A missing qualifier, or a debate among experts the claim takes one mainstream side of, is not enough on its own.
-- unverified: the sources found don't settle it. This is an honest answer, not a failure; prefer it over guessing.
+- unverified: the sources found don't address it. This is an honest answer, not a failure; prefer it over guessing. But a specific claim that no research supports, where reliable sources say the effect it describes doesn't exist, is contradicted.
 
-When the claim is that someone said or reported something, judge whether they said it, not whether it is true. For a forecast, judge whether it matches what experts actually forecast. Prefer primary sources, scientific reviews, and established outlets over blogs. Keep the explanation to two sentences a viewer could read mid-video. List only sources you actually found, each with what it says about the claim.`;
+Sources must speak to the claim as stated: guidelines or recommendations about what people should do don't contradict a claim about what they actually do. When the claim is that someone said or reported something, judge whether they said it, not whether it is true. For a forecast, judge whether it matches what experts actually forecast. Prefer primary sources, scientific reviews, and established outlets over blogs. Keep the explanation to two sentences a viewer could read mid-video. List only sources you actually found, each with what it says about the claim.`;
 
 /** The claims a viewer would most want checked, from a transcript with a "Title:" line. */
 export async function findClaims(transcript: string): Promise<Claim[]> {

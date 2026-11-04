@@ -125,3 +125,21 @@ supported, and skip at least half of the 22 supported ones. **It missed.**
   videos would get no savings at all.
 - About 560 input tokens per claim. TypeSafe's price per token isn't in its
   docs, so the cost of the filter itself is unknown.
+
+# Third prompt tune, seed-oil video only, 2026-11-03
+
+Two lines added to `CHECK_CLAIM`: guidelines about what people should do don't
+contradict claims about what they actually do (Dylan's catch on the fryer-oil
+verdict), and a specific claim no research supports, where sources say the
+effect doesn't exist, is contradicted rather than unverified. Only the
+seed-oil video was rerun, to keep tuning cheap ($0.18).
+
+- **Fixed (2):** "one serving is toxic for three years" is now contradicted
+  (was unverified in the live test); "seed oils developed around 1865, not
+  meant for food" is now misleading, as Dylan judged.
+- **Not fixed (1):** "fast food reuses oil a hundred times" is still
+  contradicted, again on reuse guidance and replacement schedules rather than
+  a count of batches. The claim is ambiguous (a week of busy frying could
+  pass 100 batches), so a prompt line may not settle it.
+- **Other changes:** the oil peroxidation ranking went from unverified to
+  misleading; the rest matched the earlier tuned run.
