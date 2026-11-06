@@ -3,7 +3,13 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, test } from "node:test";
-import { handle, queuedCheck, sourcedOnly } from "../server/main.ts";
+import {
+  handle,
+  PICKS_PER_HOUR,
+  pickLimit,
+  queuedCheck,
+  sourcedOnly,
+} from "../server/main.ts";
 
 // These requests are all refused before the language model is called, so the
 // tests spend nothing and need no API key.
@@ -50,6 +56,27 @@ test("a claim to check needs its text", async () => {
     claim: { time: "4:31", quote: "about 3 years", claim: " " },
   });
   assert.equal(response.status, 400);
+});
+
+test("checking what was just said needs captions", async () => {
+  const response = await ask("/pick", "chrome-extension://abc", {
+    videoId: "hmkoFDMAvkc",
+    title: "A video",
+    excerpt: "  ",
+  });
+  assert.equal(response.status, 400);
+});
+
+test("checking what was just said can't be spammed", () => {
+  const start = Date.UTC(2030, 0, 1);
+  for (let i = 0; i < PICKS_PER_HOUR; i++)
+    assert.equal(pickLimit(start + i * 1000), null);
+  assert.match(
+    pickLimit(start + 60_000) ?? "",
+    /20 checks this hour; try again in 59 min/,
+  );
+  // An hour after the first, its slot frees up.
+  assert.equal(pickLimit(start + 60 * 60 * 1000), null);
 });
 
 test("no source, no verdict", () => {

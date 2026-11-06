@@ -12,6 +12,7 @@ import {
   type ContentMessage,
   type FindClaimsResponse,
   type PageHookMessage,
+  type PickClaimResponse,
   type ServerRequest,
 } from "./messages.ts";
 import {
@@ -23,6 +24,7 @@ import {
 } from "./youtube.ts";
 
 const TOGGLE_ID = "vfc-toggle";
+const PICK_ID = "vfc-pick";
 const LIST_ID = "vfc-list";
 const OPEN_ITEM_ID = "vfc-open";
 const CHIPS_ID = "vfc-chips";
@@ -35,6 +37,10 @@ const PARALLEL_CHECKS = 2;
 const CHIP_WINDOW_SECONDS = 20;
 const RED_CHIP_MS = 8000;
 const QUIET_CHIP_MS = 4000;
+// "Check what was just said" looks back this far in the captions.
+const PICK_SECONDS = 20;
+// YouTube already uses C for captions; V is free ("verify").
+const PICK_KEY = "v";
 
 type Check =
   | { state: "waiting" }
@@ -52,7 +58,13 @@ interface LiveClaim extends Claim {
 
 type Status =
   | { state: "finding" }
-  | { state: "ready"; videoId: string; title: string; claims: LiveClaim[] }
+  | {
+      state: "ready";
+      videoId: string;
+      title: string;
+      cues: Cue[];
+      claims: LiveClaim[];
+    }
   | { state: "noCaptions" }
   | { state: "error"; reason: string; retry: () => void };
 
@@ -63,6 +75,10 @@ let statusVideoId: string | null = null;
 let listOpen = false;
 /** The claim whose explanation and sources are open in the list. */
 let openClaim: LiveClaim | null = null;
+/** True while "Check what was just said" waits for the server; one at a time. */
+let picking = false;
+/** What the last "Check what was just said" found, when it found no claim to show. */
+let pickNote: string | null = null;
 const chipTimers = new WeakMap<HTMLElement, number>();
 const chipsByClaim = new WeakMap<LiveClaim, HTMLButtonElement>();
 
@@ -158,7 +174,8 @@ async function findClaims(videoId: string, title: string, cues: Cue[]) {
     })
     .sort((a, b) => a.seconds - b.seconds);
   openClaim = null;
-  setStatus({ state: "ready", videoId, title, claims });
+  pickNote = null;
+  setStatus({ state: "ready", videoId, title, cues, claims });
   checkAhead();
 }
 
@@ -289,15 +306,106 @@ async function openFromChip(claim: LiveClaim): Promise<void> {
   listOpen = true;
   openClaim = claim;
   render();
+  scrollToOpen();
+}
+
+/** Finds the claim in the last PICK_SECONDS of captions and checks it. */
+async function checkWhatWasJustSaid(): Promise<void> {
+  const video = playerVideo();
+  if (status.state !== "ready" || !video || picking || adShowing()) return;
+  video.pause();
+  if (document.fullscreenElement) await document.exitFullscreen();
+  const { videoId, title, cues, claims } = status;
+  const now = video.currentTime;
+  const from = now - PICK_SECONDS;
+  listOpen = true;
+  pickNote = null;
+  // A claim already in the list from these seconds: show it rather than pay
+  // again.
+  // ponytail: assumes it's the one the viewer meant; a second, different claim
+  // in the same 20 seconds can't be picked.
+  const known = claims
+    .filter((claim) => claim.seconds >= from && claim.seconds <= now + 1)
+    .at(-1);
+  if (known) {
+    openClaim = known;
+    render();
+    if (known.check.state === "waiting") void checkClaim(known);
+    return scrollToOpen();
+  }
+  const recent = cues.filter((cue) => cue.start >= from && cue.start <= now);
+  if (recent.length === 0) {
+    pickNote = "No captions in the last 20 seconds, so nothing to check here.";
+    return render();
+  }
+  picking = true;
+  pickNote = "Finding the claim you just heard…";
+  render();
+  const response = await askServer<PickClaimResponse>({
+    type: "pickClaim",
+    videoId,
+    title,
+    excerpt: transcriptText(recent),
+  });
+  picking = false;
+  if (status.state !== "ready" || status.videoId !== videoId) return;
+  if (!response.ok) {
+    pickNote = `Couldn't check what was just said: ${response.error}`;
+    return render();
+  }
+  if (!response.claim) {
+    pickNote =
+      "Nothing to check in the last 20 seconds: no facts, figures, or forecasts.";
+    return render();
+  }
+  pickNote = null;
+  const lineStart = parseTime(response.claim.time) ?? recent[0].start;
+  const claim: LiveClaim = {
+    ...response.claim,
+    seconds: quoteStart(cues, response.claim.quote, lineStart),
+    check: { state: "waiting" },
+    chip: "none",
+  };
+  status.claims = [...status.claims, claim].sort(
+    (a, b) => a.seconds - b.seconds,
+  );
+  openClaim = claim;
+  render();
+  scrollToOpen();
+  void checkClaim(claim);
+}
+
+function scrollToOpen(): void {
   document
     .getElementById(OPEN_ITEM_ID)
-    ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    ?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 function render(): void {
   addStyle();
   renderToggle();
+  renderPickButton();
   renderList();
+}
+
+function renderPickButton(): void {
+  const toggle = document.getElementById(TOGGLE_ID);
+  let button = document.getElementById(PICK_ID) as HTMLButtonElement | null;
+  if (!toggle) return button?.remove();
+  if (!button) {
+    button = element("button");
+    button.id = PICK_ID;
+    button.type = "button";
+    button.title = `Check what was just said (${PICK_KEY.toUpperCase()})`;
+    button.addEventListener("click", (event) => {
+      event.stopPropagation(); // Not a click on the video.
+      void checkWhatWasJustSaid();
+    });
+  }
+  if (button.previousElementSibling !== toggle) toggle.after(button);
+  button.hidden = toggle.hidden || status.state !== "ready";
+  button.disabled = picking;
+  button.textContent = picking ? "Checking…" : "Check this";
 }
 
 function toggleLabel(): string {
@@ -395,8 +503,10 @@ function listBody(): HTMLElement[] {
       return [note(status.reason), button];
     }
     case "ready": {
+      const picked = pickNote ? [element("p", pickNote, "vfc-pick-note")] : [];
       if (status.claims.length === 0)
         return [
+          ...picked,
           note(
             "Nothing here a source could confirm or contradict: no facts, figures, or forecasts.",
           ),
@@ -404,8 +514,9 @@ function listBody(): HTMLElement[] {
       const items = element("ol");
       items.append(...status.claims.map(listItem));
       return [
+        ...picked,
         note(
-          "Each claim is checked against web sources a few minutes before it's said. Click one for its sources.",
+          `Each claim is checked against web sources a few minutes before it's said. Click one for its sources. Heard something else? Press ${PICK_KEY.toUpperCase()} or "Check this".`,
         ),
         items,
       ];
@@ -547,6 +658,23 @@ const STYLE = `
 #vfc-toggle:hover, #vfc-toggle[aria-expanded="true"] { background: rgba(255, 255, 255, 0.3); }
 #vfc-toggle[data-state="error"] { background: rgba(255, 78, 69, 0.45); }
 #vfc-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+#vfc-pick {
+  flex: none;
+  align-self: center;
+  height: 28px;
+  margin-right: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font: 500 13px/28px Roboto, Arial, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#vfc-pick:hover { background: rgba(255, 255, 255, 0.3); }
+#vfc-pick:disabled { opacity: 0.6; cursor: default; }
+#vfc-pick:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 #vfc-chips {
   position: absolute;
@@ -630,6 +758,7 @@ html[dark] #vfc-list {
 #vfc-list .vfc-time { min-width: 52px; padding: 8px; border: 0; border-radius: 8px; background: none; color: var(--vfc-accent); font-weight: 500; font-variant-numeric: tabular-nums; text-align: left; }
 #vfc-list .vfc-claim { display: flex; flex-direction: column; gap: 2px; padding: 8px; border: 0; border-radius: 8px; background: none; text-align: left; }
 #vfc-list .vfc-item[data-tone="red"] .vfc-claim { box-shadow: inset 3px 0 var(--vfc-red); }
+#vfc-list #vfc-open { border-radius: 8px; outline: 2px solid var(--vfc-accent); outline-offset: -2px; background: color-mix(in srgb, var(--vfc-accent) 16%, transparent); }
 #vfc-list .vfc-time:hover, #vfc-list .vfc-claim:hover, #vfc-list .vfc-close:hover { background: var(--vfc-hover); }
 #vfc-list .vfc-badge { color: var(--vfc-muted); font-size: 12px; line-height: 16px; font-weight: 500; }
 #vfc-list [data-tone="red"] .vfc-badge { color: var(--vfc-red); }
@@ -637,6 +766,7 @@ html[dark] #vfc-list {
 #vfc-list .vfc-details { grid-column: 2; padding: 0 8px 8px; }
 #vfc-list .vfc-details .vfc-note { margin: 0 0 8px; }
 #vfc-list .vfc-explanation { margin: 0 0 8px; }
+#vfc-list .vfc-pick-note { margin: 4px 8px 8px; padding: 8px; border-radius: 8px; background: var(--vfc-hover); }
 #vfc-list .vfc-sources { margin: 0; padding-left: 18px; color: var(--vfc-muted); font-size: 13px; line-height: 18px; }
 #vfc-list .vfc-sources li { margin-bottom: 4px; }
 #vfc-list .vfc-sources a { color: var(--vfc-accent); }
@@ -664,6 +794,20 @@ document.addEventListener(
     for (const claim of status.claims)
       if (claim.seconds > now) claim.chip = "none";
     checkAhead();
+  },
+  true,
+);
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (event.key.toLowerCase() !== PICK_KEY || event.repeat) return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    // Typing in the search box or a comment.
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, [contenteditable]")) return;
+    if (status.state !== "ready" || currentVideoId() === null) return;
+    event.preventDefault();
+    void checkWhatWasJustSaid();
   },
   true,
 );

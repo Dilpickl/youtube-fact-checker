@@ -22,6 +22,12 @@ const PORT = 8787;
 const MAX_TRANSCRIPT_CHARS = 400_000;
 const MAX_BODY_CHARS = 1_000_000;
 const MAX_CLAIM_CHARS = 1_000;
+// "Check what was just said" sends about 20 seconds of captions.
+const MAX_EXCERPT_CHARS = 2_000;
+// Pressing it costs a claim search plus a check (about 2.3¢), so it can't be
+// spammed: one at a time, and at most this many an hour.
+export const PICKS_PER_HOUR = 20;
+const HOUR_MS = 60 * 60 * 1000;
 // Twelve checks at once made a third of the searches fail, and the model fell
 // back on memory (eval/RESULTS.md); two at a time didn't.
 const PARALLEL_CHECKS = 2;
@@ -30,6 +36,8 @@ const PARALLEL_CHECKS = 2;
 // when the server stops; a file or database once people besides Dylan use it.
 const claimsByVideo = new Map<string, Promise<Claim[]>>();
 const verdictsByClaim = new Map<string, Promise<Verdict>>();
+let picking = false;
+const pickTimes: number[] = [];
 
 type Answer = { status: number; body: object };
 type Route = (body: Record<string, unknown>) => Promise<Answer>;
@@ -79,6 +87,34 @@ const ROUTES: Record<string, Route> = {
     }
   },
 
+  "/pick": async ({ videoId, title, excerpt }) => {
+    if (!isVideoId(videoId)) return refuse("missing or malformed video id");
+    if (typeof title !== "string" || typeof excerpt !== "string")
+      return refuse("missing title or captions");
+    if (!excerpt.trim()) return refuse("no captions in the last 20 seconds");
+    if (excerpt.length > MAX_EXCERPT_CHARS)
+      return refuse("too many captions to check at once");
+    const limit = pickLimit(Date.now());
+    if (limit) return { status: 429, body: { error: limit } };
+    picking = true;
+    try {
+      const claims = await findClaims(
+        `Title: ${title.slice(0, 300)}
+
+${excerpt}`,
+      );
+      // ponytail: the last claim is taken as the one the viewer just heard;
+      // ask the model which one if it picks the wrong one in practice.
+      const claim = claims.at(-1) ?? null;
+      log(`Picked: ${claim?.claim ?? "nothing checkable"}`);
+      return { status: 200, body: { claim } };
+    } catch (error) {
+      return modelFailed(`Picking a claim in ${videoId}`, error);
+    } finally {
+      picking = false;
+    }
+  },
+
   "/check": async ({ videoId, title, claim }) => {
     if (!isVideoId(videoId)) return refuse("missing or malformed video id");
     if (typeof title !== "string") return refuse("missing title");
@@ -104,6 +140,22 @@ const ROUTES: Record<string, Route> = {
     }
   },
 };
+
+/**
+ * Why a pick must wait, or null when it may go ahead (and is counted).
+ * Exported for tests, which pass their own clock.
+ */
+export function pickLimit(now: number): string | null {
+  if (picking) return "still checking the last one";
+  while (pickTimes.length > 0 && pickTimes[0] <= now - HOUR_MS)
+    pickTimes.shift();
+  if (pickTimes.length >= PICKS_PER_HOUR) {
+    const minutes = Math.ceil((pickTimes[0] + HOUR_MS - now) / 60_000);
+    return `that's ${PICKS_PER_HOUR} checks this hour; try again in ${minutes} min`;
+  }
+  pickTimes.push(now);
+  return null;
+}
 
 /** No source, no verdict: one without sources rests on the model's memory. */
 export function sourcedOnly(verdict: Verdict): Verdict {

@@ -9,6 +9,7 @@ const SERVER = "http://127.0.0.1:8787";
 const PATHS: Record<ServerRequest["type"], string> = {
   findClaims: "/claims",
   checkClaim: "/check",
+  pickClaim: "/pick",
 };
 
 chrome.runtime.onMessage.addListener(

@@ -26,8 +26,10 @@ export interface ContentMessage {
 /** What content.ts asks the server, through background.ts. */
 export type ServerRequest =
   | { type: "findClaims"; videoId: string; title: string; transcript: string }
-  | { type: "checkClaim"; videoId: string; title: string; claim: Claim };
+  | { type: "checkClaim"; videoId: string; title: string; claim: Claim }
+  | { type: "pickClaim"; videoId: string; title: string; excerpt: string };
 
 type Answer<T> = ({ ok: true } & T) | { ok: false; error: string };
 export type FindClaimsResponse = Answer<{ claims: Claim[] }>;
 export type CheckClaimResponse = Answer<{ verdict: Verdict }>;
+export type PickClaimResponse = Answer<{ claim: Claim | null }>;

@@ -51,6 +51,14 @@ videos):
   worked. About 2.3¢ a check. Open question from Dylan: a "contradicted" for
   "fast food reuses oil a hundred times" rested on reuse guidelines, not on
   what restaurants actually do.
+- 2026-11-05: "Check this" (button by the toggle, or V; C is YouTube's
+  captions key). Finds the claim in the last 20 seconds of captions and checks
+  it; jumps to a listed claim instead when one is from that moment. Can't be
+  spammed: one at a time, 20 an hour (server). Dylan tried it in Chrome: it
+  worked. Clicking a chip now also centers and highlights its claim in the
+  list. Open question from Dylan: "identifying your circadian clock reveals
+  your ideal sleep times" came back misleading because there's no single
+  universal ideal time, which the claim never said.
 
 ## Next
 
@@ -69,8 +77,9 @@ videos):
    list, done 2026-11-03. A prompt tune (2026-11-03) made the three-year
    seed-oil claim contradicted; the fryer-oil verdict still rests on
    guidelines (see `eval/RESULTS.md`).
-2. On-demand checking: Google Fact Check Tools API, then web evidence, then
-   per-source supports/contradicts judgments.
+2. More checking: Google Fact Check Tools API as extra evidence (first test
+   how many of the 30 eval claims it matches; Dylan is getting a key), then a
+   supports/contradicts label on each source. "Check this" done 2026-11-05.
 3. Hotkey checker: press a key (or drag a box) to check the claims in whatever
    is on screen, through the same server.
 4. AI signals and an audio fallback for videos without captions, if still
