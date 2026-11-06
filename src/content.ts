@@ -36,7 +36,8 @@ const PARALLEL_CHECKS = 2;
 // A late verdict still gets its chip this long after the claim is said.
 const CHIP_WINDOW_SECONDS = 20;
 const RED_CHIP_MS = 8000;
-const QUIET_CHIP_MS = 4000;
+const VERDICT_CHIP_MS = 6000;
+const CHECKING_CHIP_MS = 4000;
 // "Check what was just said" looks back this far in the captions.
 const PICK_SECONDS = 20;
 // YouTube already uses C for captions; V is free ("verify").
@@ -262,6 +263,15 @@ function showChip(claim: LiveClaim): void {
     chips.id = CHIPS_ID;
   }
   if (chips.parentElement !== player) player.append(chips);
+  // The title bar's height changes with fullscreen and is 0 while hidden, so
+  // keep the tallest seen; the style below keeps chips under the title while
+  // the player's controls show.
+  const titleBar = player.querySelector(".ytp-chrome-top");
+  const height = titleBar?.getBoundingClientRect().height ?? 0;
+  if (
+    height > parseFloat(chips.style.getPropertyValue("--vfc-title-bar") || "0")
+  )
+    chips.style.setProperty("--vfc-title-bar", `${height}px`);
 
   const look =
     claim.check.state === "waiting"
@@ -271,14 +281,17 @@ function showChip(claim: LiveClaim): void {
     chipsByClaim.get(claim) ?? element("button", undefined, "vfc-chip");
   chipsByClaim.set(claim, chip);
   chip.type = "button";
+  const settled =
+    claim.check.state === "done" || claim.check.state === "failed";
   chip.dataset.tone = look.tone;
+  chip.dataset.settled = String(settled);
   chip.title = `${look.label}: ${claim.claim}`;
   chip.classList.remove("vfc-leaving");
   chip.replaceChildren(
     element("strong", look.tone === "green" ? "✓ Supported" : look.label),
   );
-  // Only red flags spell out the claim; the others stay small and quiet.
-  if (look.tone === "red") chip.append(element("span", claim.claim));
+  // Every verdict spells out its claim; only "Checking…" stays small.
+  if (settled) chip.append(element("span", claim.claim));
   chip.onclick = (event) => {
     event.stopPropagation(); // Not a click on the video.
     void openFromChip(claim);
@@ -286,7 +299,11 @@ function showChip(claim: LiveClaim): void {
   if (!chip.isConnected) chips.append(chip);
 
   clearTimeout(chipTimers.get(chip));
-  const shown = look.tone === "red" ? RED_CHIP_MS : QUIET_CHIP_MS;
+  const shown = !settled
+    ? CHECKING_CHIP_MS
+    : look.tone === "red"
+      ? RED_CHIP_MS
+      : VERDICT_CHIP_MS;
   chipTimers.set(
     chip,
     window.setTimeout(() => {
@@ -678,16 +695,19 @@ const STYLE = `
 
 #vfc-chips {
   position: absolute;
-  right: 12px;
-  bottom: 72px;
+  left: 12px;
+  top: 12px;
   z-index: 61;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 6px;
   max-width: min(360px, 70%);
   pointer-events: none;
+  transition: top 0.2s;
 }
+/* At least 48px: the title can be hidden when a chip first appears. */
+#movie_player:not(.ytp-autohide) #vfc-chips { top: calc(max(var(--vfc-title-bar, 0px), 48px) + 12px); }
 .vfc-chip {
   display: flex;
   flex-direction: column;
@@ -702,25 +722,27 @@ const STYLE = `
   text-align: left;
   pointer-events: auto;
   cursor: pointer;
-  animation: vfc-in 0.2s ease-out;
-  transition: opacity 0.4s;
+  animation: vfc-in 0.3s cubic-bezier(0.05, 0, 0, 1);
+  transition: opacity 0.4s, transform 0.4s ease-in;
 }
 .vfc-chip strong { font-weight: 500; }
-.vfc-chip[data-tone="green"] strong { color: #5fdc8a; }
-.vfc-chip[data-tone="red"] {
+.vfc-chip[data-settled="true"] {
   padding: 8px 14px;
   border-radius: 10px;
-  background: #c62828;
+  background: #455a64;
   color: #fff;
   font-size: 14px;
   line-height: 19px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
-.vfc-chip[data-tone="red"] strong { font-weight: 700; }
+.vfc-chip[data-settled="true"] strong { font-weight: 700; }
+.vfc-chip[data-settled="true"][data-tone="green"] { background: #1e7d3a; }
+.vfc-chip[data-settled="true"][data-tone="red"] { background: #c62828; }
 .vfc-chip span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.vfc-chip.vfc-leaving { opacity: 0; }
+.vfc-chip.vfc-leaving { opacity: 0; transform: translateX(-24px); }
 .vfc-chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-@keyframes vfc-in { from { opacity: 0; transform: translateY(6px); } }
+/* Slides in from the video's left edge, like YouTube's info cards from the right. */
+@keyframes vfc-in { from { opacity: 0; transform: translateX(-100%); } }
 @media (prefers-reduced-motion: reduce) { .vfc-chip { animation: none; transition: none; } }
 
 #vfc-list {

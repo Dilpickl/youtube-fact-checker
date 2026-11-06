@@ -59,6 +59,11 @@ videos):
   list. Open question from Dylan: "identifying your circadian clock reveals
   your ideal sleep times" came back misleading because there's no single
   universal ideal time, which the claim never said.
+- 2026-11-05: Chips moved to the video's top left, sliding in from the edge
+  like YouTube's info cards, and below the title while the controls show.
+  Every verdict is now a bold colored chip with its claim (green supported,
+  slate unverified, red contradicted or misleading); only "Checking…" stays
+  small. Dylan tried it in Chrome: looks good.
 
 ## Next
 
@@ -98,6 +103,9 @@ reminder on 2026-10-12.
 
 ## Decisions
 
+- **2026-11-05 — Every verdict chip is easy to see; top left.** Dylan found
+  the quiet green and grey chips too easy to miss, and the bottom right
+  cluttered by YouTube's controls. Red still stays up longest (8 s vs 6 s).
 - **2026-11-03 — Show every verdict, weighted by how much it matters.**
   Replaces red flags only (2026-11-02). Dylan's reasoning: a viewer may not
   know a claim is credible, and that validation is useful too. The evidence
