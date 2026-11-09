@@ -82,9 +82,8 @@ videos):
    list, done 2026-11-03. A prompt tune (2026-11-03) made the three-year
    seed-oil claim contradicted; the fryer-oil verdict still rests on
    guidelines (see `eval/RESULTS.md`).
-2. More checking: Google Fact Check Tools API as extra evidence (first test
-   how many of the 30 eval claims it matches; Dylan is getting a key), then a
-   supports/contradicts label on each source. "Check this" done 2026-11-05.
+2. More checking: a supports/contradicts label on each source. "Check this"
+   done 2026-11-05; Fact Check API tested and dropped 2026-11-09.
 3. Hotkey checker: press a key (or drag a box) to check the claims in whatever
    is on screen, through the same server.
 4. AI signals and an audio fallback for videos without captions, if still
@@ -103,6 +102,14 @@ reminder on 2026-10-12.
 
 ## Decisions
 
+- **2026-11-09 — Google Fact Check Tools API dropped.** Tested on the 30
+  eval claims (`eval/fact-check-match.ts`): 2 matched a published
+  fact-check, and only 1 was about the same claim (Collins and the Big
+  Beautiful Bill); the other was a Snopes satire check about a different Musk
+  claim. Seed-oil and history claims got no matches. Dylan agreed it adds too
+  little for the videos he watches. Web search still finds PolitiFact and
+  FactCheck.org pages when they exist. Revisit if news videos become the main
+  use; the key stays in `.env`.
 - **2026-11-05 — Every verdict chip is easy to see; top left.** Dylan found
   the quiet green and grey chips too easy to miss, and the bottom right
   cluttered by YouTube's controls. Red still stays up longest (8 s vs 6 s).
