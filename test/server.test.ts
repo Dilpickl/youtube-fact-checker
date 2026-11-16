@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, test } from "node:test";
 import {
+  DAILY_CAP_DOLLARS,
+  dailyLimit,
   handle,
   PICKS_PER_HOUR,
   pickLimit,
@@ -88,7 +90,14 @@ test("no source, no verdict", () => {
   assert.equal(sourcedOnly(fromMemory).verdict, "unverified");
   const sourced = {
     ...fromMemory,
-    sources: [{ url: "https://a.org", title: "A", says: "No." }],
+    sources: [
+      {
+        url: "https://a.org",
+        title: "A",
+        says: "No.",
+        stance: "contradicts" as const,
+      },
+    ],
   };
   assert.equal(sourcedOnly(sourced), sourced);
 });
@@ -107,4 +116,12 @@ test("at most two checks run at once, in the order they came", async () => {
   await Promise.all([1, 2, 3, 4, 5].map(check));
   assert.equal(mostAtOnce, 2);
   assert.deepEqual(finished, [1, 2, 3, 4, 5]);
+});
+
+test("the daily budget stops spending, then starts over the next day", () => {
+  const day = 24 * 60 * 60 * 1000;
+  assert.equal(dailyLimit(100 * day, 2), null);
+  assert.equal(dailyLimit(100 * day + 1, 2 + DAILY_CAP_DOLLARS - 0.01), null);
+  assert.match(dailyLimit(100 * day + 2, 2 + DAILY_CAP_DOLLARS)!, /tomorrow/);
+  assert.equal(dailyLimit(101 * day, 2 + DAILY_CAP_DOLLARS), null);
 });

@@ -56,7 +56,12 @@ const VerdictSchema = z.object({
   verdict: z.enum(["supported", "contradicted", "misleading", "unverified"]),
   explanation: z.string(),
   sources: z.array(
-    z.object({ url: z.string(), title: z.string(), says: z.string() }),
+    z.object({
+      url: z.string(),
+      title: z.string(),
+      says: z.string(),
+      stance: z.enum(["supports", "contradicts", "context"]),
+    }),
   ),
 });
 export type Verdict = z.infer<typeof VerdictSchema>;
@@ -73,11 +78,11 @@ const CHECK_CLAIM = `You check one claim from a video against sources found with
 
 Verdicts:
 - supported: reliable sources agree with the claim as stated. A rounded number, or one inside the range experts give, is supported; mention the precise figure in the explanation.
-- contradicted: reliable sources say otherwise.
-- misleading: partly true, but a viewer would come away believing something false. A missing qualifier, or a debate among experts the claim takes one mainstream side of, is not enough on its own.
+- contradicted: reliable sources say otherwise. When the claim's central specific (a number, timespan, or effect) is wrong, it is contradicted even if a related fact is true; don't soften it to misleading.
+- misleading: partly true, but a viewer would come away believing something false, and you can name that false belief. A missing qualifier, nuance the claim leaves out, or a debate among experts the claim takes one mainstream side of, is not enough on its own: if the core of the claim holds, it is supported, and the nuance goes in the explanation. But stretching what's true of one case to a whole group (one oil's history told as all seed oils') is misleading.
 - unverified: the sources found don't address it. This is an honest answer, not a failure; prefer it over guessing. But a specific claim that no research supports, where reliable sources say the effect it describes doesn't exist, is contradicted.
 
-Sources must speak to the claim as stated: guidelines or recommendations about what people should do don't contradict a claim about what they actually do. When the claim is that someone said or reported something, judge whether they said it, not whether it is true. For a forecast, judge whether it matches what experts actually forecast. Prefer primary sources, scientific reviews, and established outlets over blogs. Keep the explanation to two sentences a viewer could read mid-video. List only sources you actually found, each with what it says about the claim.`;
+Judge the claim as stated, not a stronger version of it: don't call it misleading or contradicted for something it doesn't say (a claim about a person's own ideal isn't a claim about a universal one). Sources must speak to the claim as stated: guidelines or recommendations about what people should do don't contradict a claim about what they actually do. When the claim is that someone said or reported something, judge whether they said it, not whether it is true. For a forecast, judge whether it matches what experts actually forecast. Prefer primary sources, scientific reviews, and established outlets over blogs. Keep the explanation to two sentences a viewer could read mid-video. List only sources you actually found, each with what it says about the claim and its stance: supports, contradicts, or context when it only adds background or is mixed.`;
 
 /** The claims a viewer would most want checked, from a transcript with a "Title:" line. */
 export async function findClaims(transcript: string): Promise<Claim[]> {

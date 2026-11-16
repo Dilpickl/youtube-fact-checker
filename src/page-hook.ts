@@ -4,9 +4,12 @@
 // reads the same address. When captions are off, it turns them on for a
 // moment, hidden, so the player asks, then turns them off again. The player
 // ignores that until the video itself plays, so it waits out any ad first.
+// It reads only when content.ts asks, so it leaves YouTube alone while the
+// extension is off.
 import {
   CONTENT_SOURCE,
   PAGE_HOOK_SOURCE,
+  type ContentMessage,
   type PageHookMessage,
 } from "./messages.ts";
 import { parseJson3, pickCaptionTrack, type CaptionTrack } from "./youtube.ts";
@@ -52,7 +55,10 @@ new PerformanceObserver((list) => {
   }
 }).observe({ type: "resource" });
 
+/** The video being read or read already; null after a failure or a stop. */
 let readingVideoId: string | null = null;
+/** True while the extension is off; a read in progress gives up when it sees this. */
+let stopped = false;
 
 /** The video on the page, from its address; null off a watch page. */
 function currentVideoId(): string | null {
@@ -81,6 +87,7 @@ async function readCaptions(): Promise<void> {
     const address = new URL(await captionAddress(player, track, videoId));
     address.searchParams.set("fmt", "json3");
     const captions = await (await fetch(address)).json();
+    if (stopped) throw new Error("stopped");
     const { title = "", author = "" } = response.videoDetails ?? {};
     post({
       type: "captions",
@@ -89,7 +96,10 @@ async function readCaptions(): Promise<void> {
       cues: parseJson3(captions),
     });
   } catch (error) {
-    if (readingVideoId === videoId) readingVideoId = null; // so a retry reads again
+    // Moved on to another video: nobody is waiting for this one.
+    if (readingVideoId !== videoId) return;
+    readingVideoId = null; // So a retry, or turning back on, reads again.
+    if (stopped) return;
     const reason = error instanceof Error ? error.message : String(error);
     post({ type: "captionError", videoId, error: reason });
   }
@@ -110,6 +120,7 @@ async function captionAddress(
     const address = captionAddresses.get(videoId);
     if (address) return address;
     if (currentVideoId() !== videoId) throw new Error("the viewer moved on");
+    if (stopped) throw new Error("stopped");
     if (Date.now() - started > CAPTIONS_WAIT_MS)
       throw new Error("the player didn't load captions");
     const captionsOn = Boolean(
@@ -144,7 +155,11 @@ async function askPlayerForCaptions(
       kind: track.kind,
     });
     const started = Date.now();
-    while (!captionAddresses.has(videoId) && Date.now() - started < ASK_FOR_MS)
+    while (
+      !captionAddresses.has(videoId) &&
+      !stopped &&
+      Date.now() - started < ASK_FOR_MS
+    )
       await sleep(POLL_MS);
   } finally {
     player.setOption("captions", "track", {});
@@ -183,15 +198,10 @@ function post(message: Unsourced<PageHookMessage>): void {
   );
 }
 
-window.addEventListener("message", (event) => {
-  if (
-    event.source === window &&
-    event.data?.source === CONTENT_SOURCE &&
-    event.data.type === "readCaptions"
-  ) {
-    void readCaptions();
-  }
+window.addEventListener("message", (event: MessageEvent<ContentMessage>) => {
+  if (event.source !== window || event.data?.source !== CONTENT_SOURCE) return;
+  // A read in progress notices a stop and gives up without a word. A flag, not
+  // forgetting the video: off then on again quickly must not start a second read.
+  stopped = event.data.type === "stopReading";
+  if (!stopped) void readCaptions();
 });
-// YouTube changes videos without loading a new page, and says so with this event.
-document.addEventListener("yt-navigate-finish", () => void readCaptions());
-void readCaptions();

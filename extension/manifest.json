@@ -5,6 +5,8 @@
   "description": "Finds the checkable claims in a YouTube video as you watch.",
   "minimum_chrome_version": "111",
   "background": { "service_worker": "dist/background.js" },
+  "action": {},
+  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],

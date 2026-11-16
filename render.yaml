@@ -1,0 +1,14 @@
+# Hosts the fact-check server on Render's free tier (see README, "Host the
+# server"). The API key is typed into Render's dashboard, never committed.
+services:
+  - type: web
+    name: video-fact-check
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/main.ts
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: NODE_VERSION
+        value: 24.16.0

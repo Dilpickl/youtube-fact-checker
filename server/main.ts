@@ -1,8 +1,8 @@
 // The server the extension talks to. It holds the Anthropic key, which can't
 // go inside the extension where anyone could read it, finds the checkable
-// claims in a video's transcript, and checks each claim with web search. It
-// only listens on this computer. Run with:
-//   npm run server
+// claims in a video's transcript, and checks each claim with web search. On
+// Dylan's laptop (npm run server) it only listens on that computer; a host
+// such as Render sets PORT, and then it listens for anyone's extension.
 import {
   createServer,
   type IncomingMessage,
@@ -17,7 +17,11 @@ import {
   type Verdict,
 } from "./checker.ts";
 
-const PORT = 8787;
+const HOSTED = Boolean(process.env.PORT);
+const PORT = Number(process.env.PORT) || 8787;
+// Anyone with the extension spends Dylan's credits, so everyone together gets
+// this much a day (about three videos), then is told to come back tomorrow.
+export const DAILY_CAP_DOLLARS = 0.5;
 // About six hours of captions, far past any video worth checking claim by claim.
 const MAX_TRANSCRIPT_CHARS = 400_000;
 const MAX_BODY_CHARS = 1_000_000;
@@ -52,6 +56,8 @@ export async function handle(
     return send(response, 403, { error: "only the extension can use this" });
   const route = request.method === "POST" && ROUTES[request.url ?? ""];
   if (!route) return send(response, 404, { error: "not found" });
+  const limit = dailyLimit(Date.now(), costOf(totals));
+  if (limit) return send(response, 429, { error: limit });
 
   let body: unknown;
   try {
@@ -140,6 +146,27 @@ ${excerpt}`,
     }
   },
 };
+
+// ponytail: counted in memory, so a restart (Render's free tier sleeps when
+// idle) starts the day over; prepaid credits with auto-reload off are the hard
+// limit. Keep the day's spend in a database if the cap gets dodged that way.
+let capDay = "";
+let spentBeforeToday = 0;
+
+/**
+ * Why nothing more may be spent today (UTC), or null. `spent` is the total
+ * since the server started. Exported for tests, which pass their own clock.
+ */
+export function dailyLimit(now: number, spent: number): string | null {
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (day !== capDay) {
+    capDay = day;
+    spentBeforeToday = spent;
+  }
+  return spent - spentBeforeToday >= DAILY_CAP_DOLLARS
+    ? "today's fact-checking budget is used up; try again tomorrow"
+    : null;
+}
 
 /**
  * Why a pick must wait, or null when it may go ahead (and is counted).
@@ -243,7 +270,7 @@ if (import.meta.main) {
       console.error(error);
       if (!response.headersSent) send(response, 500, { error: "server error" });
     });
-  }).listen(PORT, "127.0.0.1", () =>
-    console.log(`Fact-check server listening on http://127.0.0.1:${PORT}`),
+  }).listen(PORT, HOSTED ? "0.0.0.0" : "127.0.0.1", () =>
+    console.log(`Fact-check server listening on port ${PORT}`),
   );
 }

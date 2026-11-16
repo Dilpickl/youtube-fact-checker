@@ -7,7 +7,9 @@
 import type { Claim, Verdict } from "../server/checker.ts";
 import {
   CONTENT_SOURCE,
+  ENABLED_KEY,
   PAGE_HOOK_SOURCE,
+  readEnabled,
   type CheckClaimResponse,
   type ContentMessage,
   type FindClaimsResponse,
@@ -73,6 +75,8 @@ type Tone = "red" | "green" | "grey";
 
 let status: Status = { state: "finding" };
 let statusVideoId: string | null = null;
+/** Off until the saved setting is read, so nothing reaches the server early. */
+let enabled = false;
 let listOpen = false;
 /** The claim whose explanation and sources are open in the list. */
 let openClaim: LiveClaim | null = null;
@@ -128,13 +132,41 @@ window.addEventListener("message", (event: MessageEvent<PageHookMessage>) => {
   }
 });
 
+function tellPageHook(type: ContentMessage["type"]): void {
+  const message: ContentMessage = { source: CONTENT_SOURCE, type };
+  window.postMessage(message, window.location.origin);
+}
+
+function setEnabled(next: boolean): void {
+  if (next === enabled) return;
+  enabled = next;
+  // Off stops a caption read in progress; on starts one if this video has
+  // none yet. page-hook.ts ignores a second ask for a video it's reading.
+  if (!enabled) tellPageHook("stopReading");
+  else if (status.state === "finding") tellPageHook("readCaptions");
+  render();
+  checkAhead();
+}
+
+/**
+ * After the extension is reloaded, this copy of the script is cut off from it
+ * and can't hear the icon, so it takes itself off the page.
+ */
+function extensionGone(): boolean {
+  if (chrome.runtime?.id) return false;
+  setEnabled(false);
+  return true;
+}
+
+readEnabled().then(setEnabled, () => setEnabled(false));
+chrome.storage.onChanged.addListener((changes) => {
+  if (ENABLED_KEY in changes)
+    setEnabled(changes[ENABLED_KEY].newValue !== false);
+});
+
 function readCaptionsAgain(): void {
   setStatus({ state: "finding" });
-  const message: ContentMessage = {
-    source: CONTENT_SOURCE,
-    type: "readCaptions",
-  };
-  window.postMessage(message, window.location.origin);
+  tellPageHook("readCaptions");
 }
 
 async function askServer<T>(
@@ -183,7 +215,7 @@ async function findClaims(videoId: string, title: string, cues: Cue[]) {
 /** Starts checks for the next claims within LOOKAHEAD_SECONDS of the playhead. */
 function checkAhead(): void {
   const video = playerVideo();
-  if (status.state !== "ready" || !video || adShowing()) return;
+  if (!enabled || status.state !== "ready" || !video || adShowing()) return;
   const now = video.currentTime;
   const { claims } = status;
   const running = claims.filter((claim) => claim.check.state === "checking");
@@ -199,7 +231,8 @@ function checkAhead(): void {
 }
 
 async function checkClaim(claim: LiveClaim): Promise<void> {
-  if (status.state !== "ready") return;
+  // Off: a "Check this" that came back late waits until the extension is on.
+  if (!enabled || status.state !== "ready") return;
   const { videoId, title } = status;
   claim.check = { state: "checking" };
   renderList();
@@ -241,7 +274,7 @@ function verdictLook(claim: LiveClaim): { label: string; tone: Tone } {
 /** Shows a chip for each claim being said now, with its verdict once there is one. */
 function showDueChips(): void {
   const video = playerVideo();
-  if (status.state !== "ready" || !video || adShowing()) return;
+  if (!enabled || status.state !== "ready" || !video || adShowing()) return;
   const now = video.currentTime;
   for (const claim of status.claims) {
     const due =
@@ -256,7 +289,7 @@ function showDueChips(): void {
 
 function showChip(claim: LiveClaim): void {
   const player = document.getElementById("movie_player");
-  if (!player) return;
+  if (!enabled || !player) return;
   let chips = document.getElementById(CHIPS_ID);
   if (!chips) {
     chips = element("div");
@@ -329,7 +362,8 @@ async function openFromChip(claim: LiveClaim): Promise<void> {
 /** Finds the claim in the last PICK_SECONDS of captions and checks it. */
 async function checkWhatWasJustSaid(): Promise<void> {
   const video = playerVideo();
-  if (status.state !== "ready" || !video || picking || adShowing()) return;
+  if (!enabled || status.state !== "ready" || !video || picking || adShowing())
+    return;
   video.pause();
   if (document.fullscreenElement) await document.exitFullscreen();
   const { videoId, title, cues, claims } = status;
@@ -399,6 +433,11 @@ function scrollToOpen(): void {
 }
 
 function render(): void {
+  if (!enabled) {
+    for (const id of [TOGGLE_ID, PICK_ID, LIST_ID, CHIPS_ID])
+      document.getElementById(id)?.remove();
+    return;
+  }
   addStyle();
   renderToggle();
   renderPickButton();
@@ -469,7 +508,8 @@ function renderToggle(): void {
 
 function renderList(): void {
   const existing = document.getElementById(LIST_ID);
-  if (!listOpen || currentVideoId() === null) return existing?.remove();
+  if (!enabled || !listOpen || currentVideoId() === null)
+    return existing?.remove();
   const list = existing ?? element("section");
   list.id = LIST_ID;
   list.setAttribute("aria-label", "Claims in this video");
@@ -595,7 +635,12 @@ function details(claim: LiveClaim): HTMLElement {
       const list = element("ul", undefined, "vfc-sources");
       for (const source of sources) {
         const item = element("li");
-        item.append(sourceLink(source.url, source.title), ` — ${source.says}`);
+        item.append(
+          element("strong", source.stance, `vfc-stance-${source.stance}`),
+          " ",
+          sourceLink(source.url, source.title),
+          ` — ${source.says}`,
+        );
         list.append(item);
       }
       box.append(list);
@@ -791,6 +836,8 @@ html[dark] #vfc-list {
 #vfc-list .vfc-pick-note { margin: 4px 8px 8px; padding: 8px; border-radius: 8px; background: var(--vfc-hover); }
 #vfc-list .vfc-sources { margin: 0; padding-left: 18px; color: var(--vfc-muted); font-size: 13px; line-height: 18px; }
 #vfc-list .vfc-sources li { margin-bottom: 4px; }
+#vfc-list .vfc-stance-supports { color: #2e9d57; }
+#vfc-list .vfc-stance-contradicts { color: #e0483e; }
 #vfc-list .vfc-sources a { color: var(--vfc-accent); }
 #vfc-list .vfc-action { height: 36px; margin: 0 8px 8px; padding: 0 16px; border: 0; border-radius: 18px; background: var(--vfc-hover); font-weight: 500; }
 #vfc-list .vfc-details .vfc-action { margin: 0; }
@@ -801,7 +848,7 @@ html[dark] #vfc-list {
 document.addEventListener(
   "timeupdate",
   (event) => {
-    if (event.target !== playerVideo()) return;
+    if (event.target !== playerVideo() || extensionGone()) return;
     checkAhead();
     showDueChips();
   },
@@ -827,7 +874,9 @@ document.addEventListener(
     // Typing in the search box or a comment.
     const target = event.target as HTMLElement | null;
     if (target?.closest("input, textarea, [contenteditable]")) return;
-    if (status.state !== "ready" || currentVideoId() === null) return;
+    // While off, V goes back to YouTube.
+    if (!enabled || status.state !== "ready" || currentVideoId() === null)
+      return;
     event.preventDefault();
     void checkWhatWasJustSaid();
   },
@@ -835,8 +884,9 @@ document.addEventListener(
 );
 // YouTube changes videos without loading a new page.
 document.addEventListener("yt-navigate-finish", () => {
-  if (statusVideoId !== currentVideoId()) setStatus({ state: "finding" });
-  else render();
+  if (statusVideoId === currentVideoId()) return render();
+  setStatus({ state: "finding" });
+  if (enabled) tellPageHook("readCaptions");
 });
 // YouTube switches between one and two columns as the window resizes; let it
 // finish before moving the list.

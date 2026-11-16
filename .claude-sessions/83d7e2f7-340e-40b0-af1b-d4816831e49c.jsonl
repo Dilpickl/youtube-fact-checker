@@ -191,3 +191,5 @@
 {"type":"agent-name","agentName":"GitHub repo setup for Dilpickl","sessionId":"83d7e2f7-340e-40b0-af1b-d4816831e49c"}
 {"type":"atis-latch","atis":"","sessionId":"83d7e2f7-340e-40b0-af1b-d4816831e49c"}
 {"type":"tools-used","tools":["PowerShell","AskUserQuestion","mcp__ccd_turn__wrap_up","Grep"],"sessionId":"83d7e2f7-340e-40b0-af1b-d4816831e49c"}
+{"type":"mode","mode":"normal","sessionId":"83d7e2f7-340e-40b0-af1b-d4816831e49c"}
+{"type":"cost-state","sessionId":"83d7e2f7-340e-40b0-af1b-d4816831e49c","totalCostUSD":1.1216046,"totalAPIDuration":141758,"totalAPIDurationWithoutRetries":141343,"totalToolDuration":64185,"totalLinesAdded":0,"totalLinesRemoved":0,"totalDuration":57866132,"startTime":1794085017553,"modelUsage":{"claude-opus-5-5":{"inputTokens":58,"outputTokens":11303,"thinkingTokens":4047,"cacheReadInputTokens":2051163,"cacheCreationInputTokens":60635,"cacheCreationEphemeral5mInputTokens":0,"cacheCreationEphemeral1hInputTokens":60635,"webSearchRequests":0,"costUSD":1.1216046}},"hasUnknownModelCost":false}
