@@ -10,16 +10,17 @@ claims worth checking ("Finding claims…", then "9 claims"); clicking it lists
 them beside the video, and clicking a claim jumps to it. Checking them against
 sources comes next.
 
-It has two parts: the extension, and a small server on your own computer that
-holds the Anthropic API key (it can't go inside the extension, where anyone
-could read it) and asks Claude for the claims.
+It has two parts: the extension, and a small server that holds the Anthropic
+API key (it can't go inside the extension, where anyone could read it) and
+asks Claude for the claims and verdicts. The server is hosted on Render, so
+the extension works on any computer without running anything else.
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) 24 or newer (it runs TypeScript directly)
 - Google Chrome
-- An Anthropic API key in a `.env` file in this folder:
-  `ANTHROPIC_API_KEY=...` (Git ignores `.env`)
+- Only to run the server yourself or the accuracy check: an Anthropic API key
+  in a `.env` file in this folder: `ANTHROPIC_API_KEY=...` (Git ignores `.env`)
 
 ## Build
 
@@ -31,16 +32,19 @@ npm run build
 The built scripts land in `extension/dist/`. Use `npm run watch` to rebuild on
 every save.
 
-## Run the server
+## The server
 
-```bash
-npm run server
-```
+The extension talks to `https://video-fact-check-6p2n.onrender.com`, which
+Render builds from `render.yaml` and redeploys on every push to `main` of
+`Dilpickl/youtube-fact-checker`. The API key is set on the service's
+Environment page in Render's dashboard, never in this repository. It is on
+the free plan, so it sleeps after 15 idle minutes and the first video after a
+break takes about a minute longer. It stops for the day once everyone
+together has spent $0.50 ("today's fact-checking budget is used up").
 
-Leave it running while you watch. It listens only on this computer
-(`http://127.0.0.1:8787`), answers only the extension, and prints what each
-video cost. Finding a video's claims costs well under a cent; it remembers
-them until it stops, so reloading a video doesn't pay again.
+To run it on your own computer instead, `npm run server` listens on
+`http://127.0.0.1:8787`; put that address in `SERVER` in `src/background.ts`
+and in `host_permissions` in `extension/manifest.json`, then rebuild.
 
 ## Load it in Chrome
 
@@ -56,7 +60,7 @@ Open a YouTube video with captions, such as
 [this seed-oil video](https://www.youtube.com/watch?v=hmkoFDMAvkc). The toggle
 appears next to the settings gear in the player's controls (move the mouse over
 the video to show them). If it says "Couldn't check: retry", hover over it to
-see why; usually the server isn't running.
+see why; after a break, the server may still be waking up, so retry in a minute.
 
 ## Develop
 

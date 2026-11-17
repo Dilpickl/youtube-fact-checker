@@ -20,5 +20,5 @@
       "run_at": "document_start"
     }
   ],
-  "host_permissions": ["http://127.0.0.1:8787/*"]
+  "host_permissions": ["https://video-fact-check-6p2n.onrender.com/*"]
 }

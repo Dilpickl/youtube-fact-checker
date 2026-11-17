@@ -1,7 +1,7 @@
 // The background service worker carries the content script's requests to the
-// local server, which holds the API keys. The content script can't call it
-// itself: its requests count as the YouTube page's, and Chrome keeps web pages
-// away from this computer's own servers.
+// hosted server, which holds the API keys. The content script can't call it
+// itself: its requests would count as the YouTube page's, and the server
+// refuses web pages.
 import { ENABLED_KEY, readEnabled, type ServerRequest } from "./messages.ts";
 
 // Clicking the icon turns the extension on or off; the content script on each
@@ -32,8 +32,10 @@ async function showOnOff() {
   });
 }
 
-// Plain HTTP is fine here: the request never leaves this computer.
-const SERVER = "http://127.0.0.1:8787";
+// The server on Render (render.yaml). To use one on this computer instead
+// (npm run server), put http://127.0.0.1:8787 here and in the manifest's
+// host_permissions.
+const SERVER = "https://video-fact-check-6p2n.onrender.com";
 const PATHS: Record<ServerRequest["type"], string> = {
   findClaims: "/claims",
   checkClaim: "/check",
@@ -61,8 +63,7 @@ async function askServer(path: string, body: object) {
   } catch {
     return {
       ok: false,
-      error:
-        "couldn't reach the fact-check server. Is it running? (npm run server)",
+      error: "couldn't reach the fact-check server. Check your connection",
     };
   }
   const answer = await response.json().catch(() => ({}));
