@@ -71,6 +71,12 @@ videos):
   video about AI in college classes: 5 claims, verdicts, and each source
   labeled supports, contradicts, or context (new). The on/off switch on the
   extension's icon also worked, but Dylan found it confusing (see Next).
+- 2026-11-16: Fact-check only when asked, and a popup. A video waits for a
+  click on **Fact-check** (player or popup) unless its channel is switched to
+  "Always check". The icon opens a popup: an on/off switch that says its state
+  in words, the current video, and what is left of today's budget. The open
+  claim in the list is a quiet tint instead of a blue outline. Dylan tried it
+  in Chrome: it worked.
 
 ## Next
 
@@ -89,16 +95,11 @@ videos):
    list, done 2026-11-03. A prompt tune (2026-11-03) made the three-year
    seed-oil claim contradicted; the fryer-oil verdict still rests on
    guidelines (see `eval/RESULTS.md`).
-2. A popup for the extension's icon, and checking only the videos Dylan
-   wants. Dylan's feedback 2026-11-16: clicking the icon only changes a small
-   badge, so it wasn't clear whether it was on (most extensions open a popup
-   with a switch); and it shouldn't run on every video, because most of what
-   Dylan watches is entertainment, not informative. Design to be agreed.
-3. Accuracy test set (see the reminder below): the fryer-oil and circadian
+2. Accuracy test set (see the reminder below): the fryer-oil and circadian
    verdicts are both open questions a test set would settle.
-4. Hotkey checker: press a key (or drag a box) to check the claims in whatever
+3. Hotkey checker: press a key (or drag a box) to check the claims in whatever
    is on screen, through the same server.
-5. AI signals and an audio fallback for videos without captions, if still
+4. AI signals and an audio fallback for videos without captions, if still
    wanted.
 
 **Reminder for Claude:** once on-demand checking works end to end, remind Dylan
@@ -113,6 +114,17 @@ reminder on 2026-10-12.
   soundtrack. Shows the planned design, labeled "Concept preview."
 
 ## Decisions
+
+- **2026-11-16 — Check only when asked; trusted channels start themselves.**
+  Dylan: most videos he watches are entertainment, not informative, so it
+  shouldn't run on all of them. Chosen over click-only (a click every time)
+  and starting by YouTube category (creators pick their own category). It
+  also keeps the $0.50 daily budget for videos that matter.
+- **2026-11-16 — A popup instead of a bare icon click.** Dylan couldn't tell
+  whether clicking the icon had turned it on or off; only a small badge
+  changed. Modeled on Dark Reader, uBlock Origin, Grammarly, and SponsorBlock:
+  one switch that states its state, plus controls for the current page. Dylan
+  picked the version that also shows the budget.
 
 - **2026-11-16 — Hosted on Render's free plan, $0.50 a day.** Dylan picked
   hosting as the next feature (over the accuracy test set and the hotkey
@@ -233,6 +245,12 @@ reminder on 2026-10-12.
   claim text, and checking only on click. No user accounts.
 
 ## Problems
+
+- **2026-11-16 — Render doesn't redeploy on push.** The service was created
+  through Render's connector from the public repo, and pushes to `main` have
+  not started a deploy. Claude starts one by hand (connector, or Manual Deploy
+  in the dashboard) after a server change. Not yet fixed; likely needs
+  Render's GitHub app connected to the repo.
 
 - **2026-11-03 — Captions failed on a video's first load.** YouTube's player
   ignores caption requests until the video itself plays, and a fresh page

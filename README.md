@@ -38,8 +38,9 @@ every save.
 ## The server
 
 The extension talks to `https://video-fact-check-6p2n.onrender.com`, which
-Render builds from `render.yaml` and redeploys on every push to `main` of
-`Dilpickl/youtube-fact-checker`. The API key is set on the service's
+Render builds from `render.yaml` and the `main` branch of
+`Dilpickl/youtube-fact-checker`. Pushes have not redeployed it by themselves
+so far, so after a server change use **Manual Deploy** in Render's dashboard. The API key is set on the service's
 Environment page in Render's dashboard, never in this repository. It is on
 the free plan, so it sleeps after 15 idle minutes and the first video after a
 break takes about a minute longer. It stops for the day once everyone
