@@ -1,11 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Video Fact Check",
-  "version": "0.2.0",
-  "description": "Finds the checkable claims in a YouTube video as you watch.",
+  "version": "0.3.0",
+  "description": "Fact-checks the claims in a YouTube video as you watch, when you ask.",
   "minimum_chrome_version": "111",
   "background": { "service_worker": "dist/background.js" },
-  "action": {},
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Video Fact Check"
+  },
   "permissions": ["storage"],
   "content_scripts": [
     {

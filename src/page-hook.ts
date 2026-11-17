@@ -4,8 +4,8 @@
 // reads the same address. When captions are off, it turns them on for a
 // moment, hidden, so the player asks, then turns them off again. The player
 // ignores that until the video itself plays, so it waits out any ad first.
-// It reads only when content.ts asks, so it leaves YouTube alone while the
-// extension is off.
+// It reads only when content.ts asks (the viewer clicked Fact-check, or trusts
+// the channel), so it leaves YouTube alone otherwise.
 import {
   CONTENT_SOURCE,
   PAGE_HOOK_SOURCE,
@@ -22,7 +22,12 @@ const ASK_FOR_MS = 3_000;
 const POLL_MS = 250;
 
 interface PlayerResponse {
-  videoDetails?: { videoId?: string; title?: string; author?: string };
+  videoDetails?: {
+    videoId?: string;
+    title?: string;
+    author?: string;
+    channelId?: string;
+  };
   captions?: {
     playerCaptionsTracklistRenderer?: { captionTracks?: CaptionTrack[] };
   };
@@ -66,18 +71,43 @@ function currentVideoId(): string | null {
   return new URLSearchParams(location.search).get("v");
 }
 
+/** The player, once it describes this video rather than the one before it. */
+function playerFor(videoId: string): Promise<Player> {
+  return waitFor(() => {
+    const element = document.getElementById("movie_player") as Player | null;
+    const playing = element?.getPlayerResponse?.()?.videoDetails?.videoId;
+    return playing === videoId ? element : null;
+  }, "YouTube's player didn't load");
+}
+
+/** Tells content.ts whose video this is, so trusted channels start by themselves. */
+async function describeVideo(): Promise<void> {
+  const videoId = currentVideoId();
+  if (!videoId) return;
+  // A video read earlier and come back to is read again when asked.
+  if (readingVideoId !== videoId) readingVideoId = null;
+  try {
+    const details = (await playerFor(videoId)).getPlayerResponse()
+      ?.videoDetails;
+    if (details?.channelId)
+      post({
+        type: "video",
+        videoId,
+        channelId: details.channelId,
+        channel: details.author ?? "this channel",
+      });
+  } catch {
+    // The player never loaded; the Fact-check button still works without this.
+  }
+}
+
 async function readCaptions(): Promise<void> {
   const videoId = currentVideoId();
   if (!videoId || videoId === readingVideoId) return;
   readingVideoId = videoId;
   post({ type: "reading", videoId });
   try {
-    // Right after YouTube changes video, the player may still describe the old one.
-    const player = await waitFor(() => {
-      const element = document.getElementById("movie_player") as Player | null;
-      const playing = element?.getPlayerResponse?.()?.videoDetails?.videoId;
-      return playing === videoId ? element : null;
-    }, "YouTube's player didn't load");
+    const player = await playerFor(videoId);
     const response = player.getPlayerResponse() ?? {};
     const track = pickCaptionTrack(
       response.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [],
@@ -202,6 +232,7 @@ window.addEventListener("message", (event: MessageEvent<ContentMessage>) => {
   if (event.source !== window || event.data?.source !== CONTENT_SOURCE) return;
   // A read in progress notices a stop and gives up without a word. A flag, not
   // forgetting the video: off then on again quickly must not start a second read.
+  if (event.data.type === "describeVideo") return void describeVideo();
   stopped = event.data.type === "stopReading";
   if (!stopped) void readCaptions();
 });

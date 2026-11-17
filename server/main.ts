@@ -54,6 +54,13 @@ export async function handle(
   const origin = request.headers.origin;
   if (origin && !origin.startsWith("chrome-extension://"))
     return send(response, 403, { error: "only the extension can use this" });
+  if (request.method === "GET" && request.url === "/budget") {
+    const left = DAILY_CAP_DOLLARS - spentToday(Date.now(), costOf(totals));
+    return send(response, 200, {
+      cap: DAILY_CAP_DOLLARS,
+      left: Math.max(0, left),
+    });
+  }
   const route = request.method === "POST" && ROUTES[request.url ?? ""];
   if (!route) return send(response, 404, { error: "not found" });
   const limit = dailyLimit(Date.now(), costOf(totals));
@@ -153,17 +160,22 @@ ${excerpt}`,
 let capDay = "";
 let spentBeforeToday = 0;
 
-/**
- * Why nothing more may be spent today (UTC), or null. `spent` is the total
- * since the server started. Exported for tests, which pass their own clock.
- */
-export function dailyLimit(now: number, spent: number): string | null {
+/** Dollars spent today (UTC); `spent` is the total since the server started. */
+function spentToday(now: number, spent: number): number {
   const day = new Date(now).toISOString().slice(0, 10);
   if (day !== capDay) {
     capDay = day;
     spentBeforeToday = spent;
   }
-  return spent - spentBeforeToday >= DAILY_CAP_DOLLARS
+  return spent - spentBeforeToday;
+}
+
+/**
+ * Why nothing more may be spent today, or null. Exported for tests, which
+ * pass their own clock.
+ */
+export function dailyLimit(now: number, spent: number): string | null {
+  return spentToday(now, spent) >= DAILY_CAP_DOLLARS
     ? "today's fact-checking budget is used up; try again tomorrow"
     : null;
 }

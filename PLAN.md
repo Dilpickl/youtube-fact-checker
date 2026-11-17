@@ -64,6 +64,13 @@ videos):
   Every verdict is now a bold colored chip with its claim (green supported,
   slate unverified, red contradicted or misleading); only "Checking…" stays
   small. Dylan tried it in Chrome: looks good.
+- 2026-11-16: The server is hosted on Render's free plan
+  (`video-fact-check-6p2n.onrender.com`, set up through Render's connector
+  from `render.yaml`), so the extension works without `npm run server`. It
+  stops for the day at $0.50 across everyone. Dylan tried it in Chrome with a
+  video about AI in college classes: 5 claims, verdicts, and each source
+  labeled supports, contradicts, or context (new). The on/off switch on the
+  extension's icon also worked, but Dylan found it confusing (see Next).
 
 ## Next
 
@@ -82,11 +89,16 @@ videos):
    list, done 2026-11-03. A prompt tune (2026-11-03) made the three-year
    seed-oil claim contradicted; the fryer-oil verdict still rests on
    guidelines (see `eval/RESULTS.md`).
-2. More checking: a supports/contradicts label on each source. "Check this"
-   done 2026-11-05; Fact Check API tested and dropped 2026-11-09.
-3. Hotkey checker: press a key (or drag a box) to check the claims in whatever
+2. A popup for the extension's icon, and checking only the videos Dylan
+   wants. Dylan's feedback 2026-11-16: clicking the icon only changes a small
+   badge, so it wasn't clear whether it was on (most extensions open a popup
+   with a switch); and it shouldn't run on every video, because most of what
+   Dylan watches is entertainment, not informative. Design to be agreed.
+3. Accuracy test set (see the reminder below): the fryer-oil and circadian
+   verdicts are both open questions a test set would settle.
+4. Hotkey checker: press a key (or drag a box) to check the claims in whatever
    is on screen, through the same server.
-4. AI signals and an audio fallback for videos without captions, if still
+5. AI signals and an audio fallback for videos without captions, if still
    wanted.
 
 **Reminder for Claude:** once on-demand checking works end to end, remind Dylan
@@ -101,6 +113,16 @@ reminder on 2026-10-12.
   soundtrack. Shows the planned design, labeled "Concept preview."
 
 ## Decisions
+
+- **2026-11-16 — Hosted on Render's free plan, $0.50 a day.** Dylan picked
+  hosting as the next feature (over the accuracy test set and the hotkey
+  checker) to make the project more substantial: a classmate can install the
+  extension and it just works. Render free over Railway or Fly.io because it
+  needs no card; the cost is a slow first video after 15 idle minutes. Dylan
+  chose the lowest cap offered ($0.50, about three videos). Known gap: the
+  cap is counted in memory and Render's free plan restarts when idle, so
+  prepaid credits with auto-reload off are the real limit. Dylan typed the
+  API key into Render's dashboard; it never went through Claude.
 
 - **2026-11-09 — Google Fact Check Tools API dropped.** Tested on the 30
   eval claims (`eval/fact-check-match.ts`): 2 matched a published

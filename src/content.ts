@@ -1,20 +1,27 @@
-// Runs in the extension's isolated world on youtube.com. Takes the captions
-// page-hook.ts reads, asks the local server (through background.ts) for the
+// Runs in the extension's isolated world on youtube.com. Does nothing on a
+// video until the viewer clicks Fact-check (in the player or the popup) or the
+// video is from a channel they chose to always check. Then it takes the
+// captions page-hook.ts reads, asks the server (through background.ts) for the
 // claims worth checking, and checks each one a few minutes before it's said.
 // Shows the results in three places: a toggle in the player's controls with
 // the count, a chip on the video as each claim is said, and a list beside the
 // video with every verdict and its sources.
 import type { Claim, Verdict } from "../server/checker.ts";
 import {
+  CHANNELS_KEY,
   CONTENT_SOURCE,
   ENABLED_KEY,
   PAGE_HOOK_SOURCE,
+  readChannels,
   readEnabled,
+  type Channels,
   type CheckClaimResponse,
   type ContentMessage,
   type FindClaimsResponse,
   type PageHookMessage,
   type PickClaimResponse,
+  type PopupRequest,
+  type PopupState,
   type ServerRequest,
 } from "./messages.ts";
 import {
@@ -60,6 +67,8 @@ interface LiveClaim extends Claim {
 }
 
 type Status =
+  /** Waiting to be asked: nothing is read or spent yet. */
+  | { state: "idle" }
   | { state: "finding" }
   | {
       state: "ready";
@@ -73,8 +82,12 @@ type Status =
 
 type Tone = "red" | "green" | "grey";
 
-let status: Status = { state: "finding" };
+let status: Status = { state: "idle" };
 let statusVideoId: string | null = null;
+/** Whose video this is, once page-hook.ts says. */
+let channel: { id: string; name: string } | null = null;
+/** Channels to fact-check without being asked. */
+let trusted: Channels = {};
 /** Off until the saved setting is read, so nothing reaches the server early. */
 let enabled = false;
 let listOpen = false;
@@ -117,6 +130,9 @@ window.addEventListener("message", (event: MessageEvent<PageHookMessage>) => {
   // An answer about a video the viewer has already left.
   if (message.videoId !== currentVideoId()) return;
   switch (message.type) {
+    case "video":
+      channel = { id: message.channelId, name: message.channel };
+      return startIfTrusted();
     case "reading":
       return setStatus({ state: "finding" });
     case "noCaptions":
@@ -143,7 +159,10 @@ function setEnabled(next: boolean): void {
   // Off stops a caption read in progress; on starts one if this video has
   // none yet. page-hook.ts ignores a second ask for a video it's reading.
   if (!enabled) tellPageHook("stopReading");
-  else if (status.state === "finding") tellPageHook("readCaptions");
+  else {
+    tellPageHook("describeVideo");
+    if (status.state === "finding") tellPageHook("readCaptions");
+  }
   render();
   checkAhead();
 }
@@ -158,11 +177,51 @@ function extensionGone(): boolean {
   return true;
 }
 
+/** Starts fact-checking this video: reads its captions, then finds its claims. */
+function start(): void {
+  if (!enabled || status.state !== "idle" || currentVideoId() === null) return;
+  setStatus({ state: "finding" });
+  tellPageHook("readCaptions");
+}
+
+function startIfTrusted(): void {
+  if (channel && channel.id in trusted) start();
+}
+
 readEnabled().then(setEnabled, () => setEnabled(false));
+void readChannels().then((channels) => {
+  trusted = channels;
+  startIfTrusted();
+});
 chrome.storage.onChanged.addListener((changes) => {
   if (ENABLED_KEY in changes)
     setEnabled(changes[ENABLED_KEY].newValue !== false);
+  if (CHANNELS_KEY in changes) {
+    trusted = (changes[CHANNELS_KEY].newValue as Channels | undefined) ?? {};
+    startIfTrusted();
+  }
 });
+// The popup asks about the video on this tab, and can start it.
+chrome.runtime.onMessage.addListener(
+  (message: Partial<PopupRequest>, _sender, sendResponse) => {
+    if (message.type !== "popupState" && message.type !== "popupStart")
+      return false;
+    if (message.type === "popupStart") {
+      if (status.state === "error") status.retry();
+      else start();
+    }
+    const state: PopupState =
+      !enabled || currentVideoId() === null
+        ? null
+        : {
+            label: toggleLabel(),
+            canStart: status.state === "idle" || status.state === "error",
+            channel,
+          };
+    sendResponse(state);
+    return false;
+  },
+);
 
 function readCaptionsAgain(): void {
   setStatus({ state: "finding" });
@@ -466,6 +525,8 @@ function renderPickButton(): void {
 
 function toggleLabel(): string {
   switch (status.state) {
+    case "idle":
+      return "Fact-check";
     case "finding":
       return "Finding claims…";
     case "noCaptions":
@@ -491,6 +552,7 @@ function renderToggle(): void {
     toggle.addEventListener("click", (event) => {
       event.stopPropagation(); // Not a click on the video.
       if (status.state === "error") return status.retry();
+      if (status.state === "idle") return start();
       listOpen = !listOpen;
       render();
     });
@@ -502,7 +564,9 @@ function renderToggle(): void {
   toggle.title =
     status.state === "error"
       ? status.reason
-      : "Claims in this video worth checking";
+      : status.state === "idle"
+        ? "Fact-check this video"
+        : "Claims in this video worth checking";
   toggle.setAttribute("aria-expanded", String(listOpen));
 }
 
@@ -540,6 +604,12 @@ function listHeader(): HTMLElement {
 
 function listBody(): HTMLElement[] {
   switch (status.state) {
+    case "idle": {
+      const button = element("button", "Fact-check this video", "vfc-action");
+      button.type = "button";
+      button.addEventListener("click", start);
+      return [note("This video hasn't been fact-checked yet."), button];
+    }
     case "finding":
       return [
         note(
@@ -825,7 +895,7 @@ html[dark] #vfc-list {
 #vfc-list .vfc-time { min-width: 52px; padding: 8px; border: 0; border-radius: 8px; background: none; color: var(--vfc-accent); font-weight: 500; font-variant-numeric: tabular-nums; text-align: left; }
 #vfc-list .vfc-claim { display: flex; flex-direction: column; gap: 2px; padding: 8px; border: 0; border-radius: 8px; background: none; text-align: left; }
 #vfc-list .vfc-item[data-tone="red"] .vfc-claim { box-shadow: inset 3px 0 var(--vfc-red); }
-#vfc-list #vfc-open { border-radius: 8px; outline: 2px solid var(--vfc-accent); outline-offset: -2px; background: color-mix(in srgb, var(--vfc-accent) 16%, transparent); }
+#vfc-list #vfc-open { margin: 6px 0; border-radius: 8px; background: color-mix(in srgb, var(--vfc-accent) 14%, transparent); }
 #vfc-list .vfc-time:hover, #vfc-list .vfc-claim:hover, #vfc-list .vfc-close:hover { background: var(--vfc-hover); }
 #vfc-list .vfc-badge { color: var(--vfc-muted); font-size: 12px; line-height: 16px; font-weight: 500; }
 #vfc-list [data-tone="red"] .vfc-badge { color: var(--vfc-red); }
@@ -885,8 +955,9 @@ document.addEventListener(
 // YouTube changes videos without loading a new page.
 document.addEventListener("yt-navigate-finish", () => {
   if (statusVideoId === currentVideoId()) return render();
-  setStatus({ state: "finding" });
-  if (enabled) tellPageHook("readCaptions");
+  channel = null;
+  setStatus({ state: "idle" });
+  if (enabled) tellPageHook("describeVideo");
 });
 // YouTube switches between one and two columns as the window resizes; let it
 // finish before moving the list.

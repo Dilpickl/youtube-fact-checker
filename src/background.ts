@@ -4,16 +4,8 @@
 // refuses web pages.
 import { ENABLED_KEY, readEnabled, type ServerRequest } from "./messages.ts";
 
-// Clicking the icon turns the extension on or off; the content script on each
-// YouTube tab hears the change and hides or shows itself.
-// Clicks wait their turn, so a quick double click turns it off and on again
-// rather than both clicks reading "on" and writing "off".
-let lastToggle = Promise.resolve();
-chrome.action.onClicked.addListener(() => {
-  lastToggle = lastToggle.then(async () => {
-    await chrome.storage.local.set({ [ENABLED_KEY]: !(await readEnabled()) });
-  });
-});
+// The popup's switch turns the extension on or off; the icon shows "OFF" so
+// the state is visible without opening it.
 chrome.storage.onChanged.addListener((changes) => {
   if (ENABLED_KEY in changes) void showOnOff();
 });
@@ -26,9 +18,7 @@ async function showOnOff() {
   await chrome.action.setBadgeBackgroundColor({ color: "#5f6368" });
   await chrome.action.setBadgeText({ text: enabled ? "" : "OFF" });
   await chrome.action.setTitle({
-    title: enabled
-      ? "Video Fact Check is on. Click to turn it off."
-      : "Video Fact Check is off. Click to turn it on.",
+    title: enabled ? "Video Fact Check is on" : "Video Fact Check is off",
   });
 }
 
@@ -40,25 +30,29 @@ const PATHS: Record<ServerRequest["type"], string> = {
   findClaims: "/claims",
   checkClaim: "/check",
   pickClaim: "/pick",
+  budget: "/budget",
 };
 
 chrome.runtime.onMessage.addListener(
   (message: Partial<ServerRequest>, _sender, sendResponse) => {
     const path = message.type && PATHS[message.type];
     if (!path) return false;
-    const { type: _type, ...body } = message;
-    void askServer(path, body).then(sendResponse);
+    const { type, ...body } = message;
+    // Only the budget is a question with nothing to send.
+    void askServer(path, type === "budget" ? undefined : body).then(
+      sendResponse,
+    );
     return true; // Keeps the channel open until sendResponse is called.
   },
 );
 
-async function askServer(path: string, body: object) {
+async function askServer(path: string, body?: object) {
   let response: Response;
   try {
     response = await fetch(`${SERVER}${path}`, {
-      method: "POST",
+      method: body ? "POST" : "GET",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: body && JSON.stringify(body),
     });
   } catch {
     return {

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/content.ts src/page-hook.ts src/background.ts --bundle --outdir=extension/dist --target=chrome111",
+    "build": "esbuild src/content.ts src/page-hook.ts src/background.ts src/popup.ts --bundle --outdir=extension/dist --target=chrome111",
     "watch": "npm run build -- --watch",
     "typecheck": "tsc",
     "test": "node --test \"test/**/*.test.ts\"",

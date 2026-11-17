@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Video Fact Check</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --text: #0f0f0f;
+        --muted: #606060;
+        --line: rgba(0, 0, 0, 0.12);
+        --surface: #fff;
+        --button: #065fd4;
+        --off: #909090;
+        --on: #1e7d3a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #f1f1f1;
+          --muted: #aaa;
+          --line: rgba(255, 255, 255, 0.16);
+          --surface: #212121;
+          --button: #3ea6ff;
+          --off: #717171;
+          --on: #2e9d57;
+        }
+      }
+      body {
+        width: 300px;
+        margin: 0;
+        padding: 14px 16px;
+        background: var(--surface);
+        color: var(--text);
+        font:
+          400 14px/20px Roboto,
+          "Segoe UI",
+          Arial,
+          sans-serif;
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 16px;
+        line-height: 22px;
+      }
+      h2 {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 16px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      section,
+      #hint,
+      #budget {
+        margin: 12px 0 0;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+      #hint,
+      #budget {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 18px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 32px;
+        cursor: pointer;
+      }
+      #enabled-label {
+        font-weight: 500;
+      }
+      /* A checkbox drawn as a switch. */
+      input[type="checkbox"] {
+        appearance: none;
+        flex: none;
+        position: relative;
+        width: 40px;
+        height: 22px;
+        margin: 0;
+        border-radius: 11px;
+        background: var(--off);
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      input[type="checkbox"]::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #fff;
+        transition: left 0.15s;
+      }
+      input[type="checkbox"]:checked {
+        background: var(--on);
+      }
+      input[type="checkbox"]:checked::after {
+        left: 21px;
+      }
+      input[type="checkbox"]:focus-visible,
+      button:focus-visible {
+        outline: 2px solid var(--button);
+        outline-offset: 2px;
+      }
+      #start {
+        width: 100%;
+        height: 36px;
+        margin-bottom: 8px;
+        border: 0;
+        border-radius: 18px;
+        background: var(--button);
+        color: var(--surface);
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      #start:disabled {
+        background: var(--line);
+        color: var(--muted);
+        cursor: default;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Video Fact Check</h1>
+    <label class="row">
+      <span id="enabled-label">Fact-checking is on</span>
+      <input type="checkbox" role="switch" id="enabled" />
+    </label>
+    <section id="video" hidden>
+      <h2>This video</h2>
+      <button type="button" id="start">Fact-check this video</button>
+      <label class="row" id="channel-row" hidden>
+        <span id="channel-label"></span>
+        <input type="checkbox" role="switch" id="channel" />
+      </label>
+    </section>
+    <p id="hint" hidden></p>
+    <p id="budget">Today's budget: checking…</p>
+    <script type="module" src="dist/popup.js"></script>
+  </body>
+</html>

@@ -5,10 +5,13 @@ video's captions, finds the checkable claims, and (soon) checks each against
 sources, live. See `PLAN.md` for where the project stands and `RESEARCH.md`
 for why it is built this way.
 
-Current state: on a YouTube video, a toggle in the player's controls finds the
-claims worth checking ("Finding claims…", then "9 claims"); clicking it lists
-them beside the video, and clicking a claim jumps to it. Checking them against
-sources comes next.
+Current state: on a YouTube video, click **Fact-check** in the player's
+controls ("Finding claims…", then "9 claims"). Each claim is checked against
+web sources a few minutes before it is said; a chip appears on the video with
+the verdict, and the list beside the video shows every verdict with its
+sources. Press V or "Check this" to check something the list missed. The
+extension's icon opens a popup with the on/off switch, a switch to always
+check the current video's channel, and what is left of today's budget.
 
 It has two parts: the extension, and a small server that holds the Anthropic
 API key (it can't go inside the extension, where anyone could read it) and
@@ -57,10 +60,12 @@ and in `host_permissions` in `extension/manifest.json`, then rebuild.
 ## Try it
 
 Open a YouTube video with captions, such as
-[this seed-oil video](https://www.youtube.com/watch?v=hmkoFDMAvkc). The toggle
-appears next to the settings gear in the player's controls (move the mouse over
-the video to show them). If it says "Couldn't check: retry", hover over it to
-see why; after a break, the server may still be waking up, so retry in a minute.
+[this seed-oil video](https://www.youtube.com/watch?v=hmkoFDMAvkc). The
+**Fact-check** button appears next to the settings gear in the player's
+controls (move the mouse over the video to show them); nothing is read or
+spent until you click it. If it says "Couldn't check: retry", hover over it to
+see why; after a break, the server may still be waking up, so retry in a
+minute.
 
 ## Develop
 

@@ -118,6 +118,16 @@ test("at most two checks run at once, in the order they came", async () => {
   assert.deepEqual(finished, [1, 2, 3, 4, 5]);
 });
 
+test("the popup can ask how much of today's budget is left", async () => {
+  const response = await fetch(`http://127.0.0.1:${port}/budget`, {
+    headers: { Origin: "chrome-extension://abc" },
+  });
+  assert.deepEqual(await response.json(), {
+    cap: DAILY_CAP_DOLLARS,
+    left: DAILY_CAP_DOLLARS,
+  });
+});
+
 test("the daily budget stops spending, then starts over the next day", () => {
   const day = 24 * 60 * 60 * 1000;
   assert.equal(dailyLimit(100 * day, 2), null);
