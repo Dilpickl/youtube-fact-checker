@@ -77,6 +77,14 @@ videos):
   in words, the current video, and what is left of today's budget. The open
   claim in the list is a quiet tint instead of a blue outline. Dylan tried it
   in Chrome: it worked.
+- 2026-11-16: The daily budget survives restarts. The popup kept showing the
+  full $0.50 because Render's free plan restarts the server when idle. The
+  day's spend now lives in a free Render Key Value store
+  (`video-fact-check-budget-6p2n`). Claude checked it on Render: the budget
+  read $0.4999 before and after a restart.
+- 2026-11-16: Mathematics gets a verdict. A Short quizzing a math major came
+  back with five "unverified" equations (see Problems). Dylan tried the fix
+  in Chrome: all supported.
 
 ## Next
 
@@ -95,11 +103,20 @@ videos):
    list, done 2026-11-03. A prompt tune (2026-11-03) made the three-year
    seed-oil claim contradicted; the fryer-oil verdict still rests on
    guidelines (see `eval/RESULTS.md`).
-2. Accuracy test set (see the reminder below): the fryer-oil and circadian
+2. **In progress: YouTube Shorts**, "as if YouTube made it" (Dylan's finish
+   line). Built and tried by Dylan 2026-11-16: a Fact-check button with the
+   Short's own pause and volume buttons, claims beside the video, a popup
+   switch to check every Short (click-only is the default), and a new popup
+   and icon (a speech bubble with a check; Dylan found a shield unoriginal).
+   Not yet tried by Dylan: claims fade after a few seconds, a lighter
+   dark-glass look, the tally button opening all claims as a panel, the
+   column following the video when comments open, and every-Short starting
+   at half a second instead of three.
+3. Accuracy test set (see the reminder below): the fryer-oil and circadian
    verdicts are both open questions a test set would settle.
-3. Hotkey checker: press a key (or drag a box) to check the claims in whatever
+4. Hotkey checker: press a key (or drag a box) to check the claims in whatever
    is on screen, through the same server.
-4. AI signals and an audio fallback for videos without captions, if still
+5. AI signals and an audio fallback for videos without captions, if still
    wanted.
 
 **Reminder for Claude:** once on-demand checking works end to end, remind Dylan
@@ -114,6 +131,18 @@ reminder on 2026-10-12.
   soundtrack. Shows the planned design, labeled "Concept preview."
 
 ## Decisions
+
+- **2026-11-16 — On a Short, claims go beside the video, briefly.** Dylan
+  first chose chips on the video with a tap for detail ("nobody wants a wall
+  of text on the side"), then on seeing it asked for the empty space beside
+  the video instead of covering it. When claims then stayed put he found them
+  distracting and the solid green too strong: "a cool informative popup, not
+  intrusive." So they pop up beside the video, fade like chips, and the
+  button pulls them all up as a panel.
+- **2026-11-16 — A verdict may rest on working it out.** Only for pure
+  mathematics or logic; every other claim still needs a source. Dylan didn't
+  want a calculator, only for textbook facts such as the 2×2 determinant not
+  to come back unverified.
 
 - **2026-11-16 — Check only when asked; trusted channels start themselves.**
   Dylan: most videos he watches are entertainment, not informative, so it
@@ -246,11 +275,19 @@ reminder on 2026-10-12.
 
 ## Problems
 
+- **2026-11-16 — Maths came back "unverified".** The model answered
+  "supported" without searching, rightly, since it's textbook mathematics;
+  the server's "no source, no verdict" rule then replaced that with
+  unverified. Found by running the determinant claim through the old code.
+  Verdicts now carry a method (sources or calculation), and worked-out ones
+  are kept.
+
 - **2026-11-16 — Render doesn't redeploy on push.** The service was created
   through Render's connector from the public repo, and pushes to `main` have
   not started a deploy. Claude starts one by hand (connector, or Manual Deploy
   in the dashboard) after a server change. Not yet fixed; likely needs
-  Render's GitHub app connected to the repo.
+  Render's GitHub app connected to the repo. A change to `render.yaml` is
+  applied by syncing the Blueprint, which also deploys.
 
 - **2026-11-03 — Captions failed on a video's first load.** YouTube's player
   ignores caption requests until the video itself plays, and a fresh page

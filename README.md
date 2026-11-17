@@ -14,9 +14,9 @@ extension's icon opens a popup with the on/off switch, a switch to always
 check the current video's channel, and what is left of today's budget.
 
 On a Short, the **Fact-check** button sits with the Short's own pause and
-volume buttons. Verdict chips appear on the video as claims are said, and
-clicking one (or the button) pauses the Short and opens that claim as a small
-card on the video, one claim at a time. Shorts are checked only when asked,
+volume buttons. Each claim pops up beside the video as it is said and fades
+after a few seconds; clicking one opens its explanation and sources, and the
+button pulls all of them up as a panel. Shorts are checked only when asked,
 unless "Check every Short" is on in the popup.
 
 It has two parts: the extension, and a small server that holds the Anthropic
@@ -50,7 +50,9 @@ so far, so after a server change use **Manual Deploy** in Render's dashboard. Th
 Environment page in Render's dashboard, never in this repository. It is on
 the free plan, so it sleeps after 15 idle minutes and the first video after a
 break takes about a minute longer. It stops for the day once everyone
-together has spent $0.50 ("today's fact-checking budget is used up").
+together has spent $0.50 ("today's fact-checking budget is used up"). The
+day's spend is kept in a Render Key Value store (also in `render.yaml`), so it
+survives those restarts.
 
 To run it on your own computer instead, `npm run server` listens on
 `http://127.0.0.1:8787`; put that address in `SERVER` in `src/background.ts`
