@@ -6,30 +6,34 @@
     <style>
       :root {
         color-scheme: light dark;
+        --page: #f4f5f7;
+        --card: #fff;
         --text: #0f0f0f;
         --muted: #606060;
-        --line: rgba(0, 0, 0, 0.12);
-        --surface: #fff;
-        --button: #065fd4;
-        --off: #909090;
-        --on: #1e7d3a;
+        --line: rgba(0, 0, 0, 0.1);
+        --accent: #12a05c;
+        --accent-deep: #0b7f47;
+        --off: #9aa0a6;
+        --off-deep: #7d838a;
       }
       @media (prefers-color-scheme: dark) {
         :root {
+          --page: #0f0f0f;
+          --card: #1f1f1f;
           --text: #f1f1f1;
           --muted: #aaa;
-          --line: rgba(255, 255, 255, 0.16);
-          --surface: #212121;
-          --button: #3ea6ff;
-          --off: #717171;
-          --on: #2e9d57;
+          --line: rgba(255, 255, 255, 0.12);
+          --accent: #22c071;
+          --accent-deep: #109455;
+          --off: #5f6368;
+          --off-deep: #45484c;
         }
       }
       body {
-        width: 300px;
+        width: 320px;
         margin: 0;
-        padding: 14px 16px;
-        background: var(--surface);
+        padding: 14px;
+        background: var(--page);
         color: var(--text);
         font:
           400 14px/20px Roboto,
@@ -38,28 +42,96 @@
           sans-serif;
       }
       h1 {
-        margin: 0 0 10px;
-        font-size: 16px;
-        line-height: 22px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        font-size: 15px;
+        line-height: 20px;
+        font-weight: 700;
+      }
+      h1 svg {
+        width: 20px;
+        height: 20px;
+        color: var(--accent);
       }
       h2 {
         margin: 0 0 8px;
         color: var(--muted);
+        font-size: 11px;
+        line-height: 16px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      /* The on/off button: a speech bubble (a claim) with a check (its verdict). */
+      .hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 18px 0 16px;
+        text-align: center;
+      }
+      #enabled {
+        display: grid;
+        place-items: center;
+        width: 104px;
+        height: 104px;
+        margin-bottom: 12px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: linear-gradient(145deg, var(--off), var(--off-deep));
+        color: var(--off-deep);
+        cursor: pointer;
+        transition:
+          transform 0.15s,
+          box-shadow 0.25s;
+      }
+      #enabled svg {
+        width: 58px;
+        height: 58px;
+        margin-top: 4px;
+        opacity: 0.85;
+      }
+      #enabled[aria-checked="true"] {
+        background: linear-gradient(145deg, var(--accent), var(--accent-deep));
+        color: var(--accent-deep);
+        box-shadow:
+          0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent),
+          0 0 0 13px color-mix(in srgb, var(--accent) 10%, transparent),
+          0 8px 20px color-mix(in srgb, var(--accent) 40%, transparent);
+      }
+      #enabled[aria-checked="true"] svg {
+        opacity: 1;
+      }
+      #enabled:hover {
+        transform: scale(1.04);
+      }
+      #enabled:active {
+        transform: scale(0.97);
+      }
+      #enabled-label {
+        font-size: 16px;
+        line-height: 22px;
+        font-weight: 700;
+      }
+      #enabled-hint {
+        color: var(--muted);
         font-size: 12px;
         line-height: 16px;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
       }
+
       section,
-      #hint,
-      #budget {
-        margin: 12px 0 0;
-        padding-top: 12px;
-        border-top: 1px solid var(--line);
+      #hint {
+        margin-top: 10px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: var(--card);
+        box-shadow: 0 0 0 1px var(--line);
       }
-      #hint,
-      #budget {
+      #hint {
         color: var(--muted);
         font-size: 13px;
         line-height: 18px;
@@ -69,18 +141,21 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        min-height: 32px;
+        min-height: 28px;
         cursor: pointer;
       }
-      #enabled-label {
-        font-weight: 500;
+      .row small {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 16px;
       }
       /* A checkbox drawn as a switch. */
       input[type="checkbox"] {
         appearance: none;
         flex: none;
         position: relative;
-        width: 40px;
+        width: 38px;
         height: 22px;
         margin: 0;
         border-radius: 11px;
@@ -100,24 +175,23 @@
         transition: left 0.15s;
       }
       input[type="checkbox"]:checked {
-        background: var(--on);
+        background: var(--accent);
       }
       input[type="checkbox"]:checked::after {
-        left: 21px;
+        left: 19px;
       }
       input[type="checkbox"]:focus-visible,
       button:focus-visible {
-        outline: 2px solid var(--button);
-        outline-offset: 2px;
+        outline: 2px solid var(--text);
+        outline-offset: 3px;
       }
       #start {
         width: 100%;
-        height: 36px;
-        margin-bottom: 8px;
+        height: 38px;
         border: 0;
-        border-radius: 18px;
-        background: var(--button);
-        color: var(--surface);
+        border-radius: 19px;
+        background: var(--text);
+        color: var(--card);
         font: inherit;
         font-weight: 500;
         cursor: pointer;
@@ -127,27 +201,107 @@
         color: var(--muted);
         cursor: default;
       }
+      #channel-row {
+        margin-top: 10px;
+      }
+      .budget {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        line-height: 18px;
+      }
+      .budget span:last-child {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .bar {
+        height: 6px;
+        margin-top: 8px;
+        border-radius: 3px;
+        background: var(--line);
+        overflow: hidden;
+      }
+      #budget-bar {
+        width: 0;
+        height: 100%;
+        border-radius: 3px;
+        background: var(--accent);
+        transition: width 0.4s;
+      }
       [hidden] {
         display: none !important;
       }
     </style>
   </head>
   <body>
-    <h1>Video Fact Check</h1>
-    <label class="row">
+    <h1>
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M14 6h36a10 10 0 0 1 10 10v22a10 10 0 0 1-10 10H31L18 59V48h-4A10 10 0 0 1 4 38V16A10 10 0 0 1 14 6z"
+        />
+        <path
+          fill="none"
+          stroke="#fff"
+          stroke-width="6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M20 27l9 9 16-17"
+        />
+      </svg>
+      Video Fact Check
+    </h1>
+    <div class="hero">
+      <button type="button" role="switch" aria-checked="true" id="enabled">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <path
+            fill="#fff"
+            d="M14 6h36a10 10 0 0 1 10 10v22a10 10 0 0 1-10 10H31L18 59V48h-4A10 10 0 0 1 4 38V16A10 10 0 0 1 14 6z"
+          />
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M20 27l9 9 16-17"
+          />
+        </svg>
+      </button>
       <span id="enabled-label">Fact-checking is on</span>
-      <input type="checkbox" role="switch" id="enabled" />
-    </label>
-    <section id="video" hidden>
-      <h2>This video</h2>
-      <button type="button" id="start">Fact-check this video</button>
-      <label class="row" id="channel-row" hidden>
-        <span id="channel-label"></span>
-        <input type="checkbox" role="switch" id="channel" />
-      </label>
-    </section>
-    <p id="hint" hidden></p>
-    <p id="budget">Today's budget: checking…</p>
+      <span id="enabled-hint">Click to turn it off</span>
+    </div>
+    <div id="settings">
+      <section id="video" hidden>
+        <h2>This video</h2>
+        <button type="button" id="start">Fact-check this video</button>
+        <label class="row" id="channel-row" hidden>
+          <span id="channel-label"></span>
+          <input type="checkbox" role="switch" id="channel" />
+        </label>
+      </section>
+      <p id="hint" hidden>
+        Open a YouTube video or Short to fact-check it. If one is already open,
+        reload its tab.
+      </p>
+      <section>
+        <h2>Shorts</h2>
+        <label class="row">
+          <span>
+            Check every Short
+            <small>Starts after 3 seconds, so skipped ones are free</small>
+          </span>
+          <input type="checkbox" role="switch" id="all-shorts" />
+        </label>
+      </section>
+      <section>
+        <div class="budget">
+          <span>Today's budget</span>
+          <span id="budget-text">Checking…</span>
+        </div>
+        <div class="bar"><div id="budget-bar"></div></div>
+      </section>
+    </div>
     <script type="module" src="dist/popup.js"></script>
   </body>
 </html>

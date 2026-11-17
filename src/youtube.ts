@@ -100,3 +100,18 @@ export function parseTime(time: string): number | null {
   const [, hours = "0", minutes, seconds] = match;
   return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
 }
+
+/** The video a YouTube address shows, a watch page's or a Short's; null elsewhere. */
+export function videoIdOf(pathname: string, search: string): string | null {
+  if (pathname === "/watch") return new URLSearchParams(search).get("v");
+  return /^\/shorts\/([\w-]{11})/.exec(pathname)?.[1] ?? null;
+}
+
+export function isShorts(pathname: string): boolean {
+  return pathname.startsWith("/shorts/");
+}
+
+/** The id of YouTube's player element: Shorts have their own. */
+export function playerIdOf(pathname: string): string {
+  return isShorts(pathname) ? "shorts-player" : "movie_player";
+}

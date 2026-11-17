@@ -5,13 +5,17 @@
 // claims worth checking, and checks each one a few minutes before it's said.
 // Shows the results in three places: a toggle in the player's controls with
 // the count, a chip on the video as each claim is said, and a list beside the
-// video with every verdict and its sources.
+// video with every verdict and its sources. On a Short the toggle sits with
+// the Short's own controls, and the claims appear one by one in the empty
+// space beside the video, where clicking one opens its sources.
 import type { Claim, Verdict } from "../server/checker.ts";
 import {
+  ALL_SHORTS_KEY,
   CHANNELS_KEY,
   CONTENT_SOURCE,
   ENABLED_KEY,
   PAGE_HOOK_SOURCE,
+  readAllShorts,
   readChannels,
   readEnabled,
   type Channels,
@@ -26,9 +30,12 @@ import {
 } from "./messages.ts";
 import {
   formatTime,
+  isShorts,
   parseTime,
+  playerIdOf,
   quoteStart,
   transcriptText,
+  videoIdOf,
   type Cue,
 } from "./youtube.ts";
 
@@ -37,6 +44,14 @@ const PICK_ID = "vfc-pick";
 const LIST_ID = "vfc-list";
 const OPEN_ITEM_ID = "vfc-open";
 const CHIPS_ID = "vfc-chips";
+const SIDE_ID = "vfc-side";
+// The column beside a Short: this wide at most, and over the video's foot
+// when the window leaves less than the minimum.
+const SIDE_MAX_WIDTH = 340;
+const SIDE_MIN_WIDTH = 220;
+const SIDE_GAP = 16;
+// With "every Short" on, one swiped past sooner than this costs nothing.
+const SHORTS_START_SECONDS = 3;
 const STYLE_ID = "vfc-style";
 // Checks run this far ahead of the playhead, so verdicts are ready when a
 // claim is said and nothing past where the viewer stops gets paid for.
@@ -88,6 +103,8 @@ let statusVideoId: string | null = null;
 let channel: { id: string; name: string } | null = null;
 /** Channels to fact-check without being asked. */
 let trusted: Channels = {};
+/** Whether every Short is fact-checked without being asked. */
+let allShorts = false;
 /** Off until the saved setting is read, so nothing reaches the server early. */
 let enabled = false;
 let listOpen = false;
@@ -99,22 +116,37 @@ let picking = false;
 let pickNote: string | null = null;
 const chipTimers = new WeakMap<HTMLElement, number>();
 const chipsByClaim = new WeakMap<LiveClaim, HTMLButtonElement>();
+/** Claims already shown beside a Short. */
+const sideSeen = new WeakSet<LiveClaim>();
 
-/** The video on the page, from its address; null off a watch page. */
+/** The video on the page, from its address; null when it isn't a video or a Short. */
 function currentVideoId(): string | null {
-  if (location.pathname !== "/watch") return null;
-  return new URLSearchParams(location.search).get("v");
+  return videoIdOf(location.pathname, location.search);
+}
+
+function onShorts(): boolean {
+  return isShorts(location.pathname);
+}
+
+/** YouTube's player for this page; Shorts have their own. */
+function player(): HTMLElement | null {
+  return document.getElementById(playerIdOf(location.pathname));
 }
 
 function playerVideo(): HTMLVideoElement | null {
-  return document.querySelector("#movie_player video");
+  return player()?.querySelector("video") ?? null;
+}
+
+/** The video's own frame: what chips are laid over, and what a Short's claims sit beside. */
+function overlayHost(): HTMLElement | null {
+  return onShorts()
+    ? (player()?.closest<HTMLElement>("#player-container") ?? null)
+    : player();
 }
 
 /** During an ad, the player's video and its time belong to the ad. */
 function adShowing(): boolean {
-  return Boolean(
-    document.getElementById("movie_player")?.classList.contains("ad-showing"),
-  );
+  return Boolean(player()?.classList.contains("ad-showing"));
 }
 
 function setStatus(next: Status): void {
@@ -193,6 +225,7 @@ void readChannels().then((channels) => {
   trusted = channels;
   startIfTrusted();
 });
+void readAllShorts().then((all) => (allShorts = all));
 chrome.storage.onChanged.addListener((changes) => {
   if (ENABLED_KEY in changes)
     setEnabled(changes[ENABLED_KEY].newValue !== false);
@@ -200,6 +233,8 @@ chrome.storage.onChanged.addListener((changes) => {
     trusted = (changes[CHANNELS_KEY].newValue as Channels | undefined) ?? {};
     startIfTrusted();
   }
+  if (ALL_SHORTS_KEY in changes)
+    allShorts = changes[ALL_SHORTS_KEY].newValue === true;
 });
 // The popup asks about the video on this tab, and can start it.
 chrome.runtime.onMessage.addListener(
@@ -294,7 +329,7 @@ async function checkClaim(claim: LiveClaim): Promise<void> {
   if (!enabled || status.state !== "ready") return;
   const { videoId, title } = status;
   claim.check = { state: "checking" };
-  renderList();
+  render();
   const { time, quote, claim: text } = claim;
   const response = await askServer<CheckClaimResponse>({
     type: "checkClaim",
@@ -306,7 +341,7 @@ async function checkClaim(claim: LiveClaim): Promise<void> {
     ? { state: "done", verdict: response.verdict }
     : { state: "failed", error: response.error };
   if (videoId !== currentVideoId()) return;
-  renderList();
+  render();
   showDueChips();
   checkAhead();
 }
@@ -335,30 +370,34 @@ function showDueChips(): void {
   const video = playerVideo();
   if (!enabled || status.state !== "ready" || !video || adShowing()) return;
   const now = video.currentTime;
+  let changed = false;
   for (const claim of status.claims) {
     const due =
       claim.seconds <= now && now < claim.seconds + CHIP_WINDOW_SECONDS;
     if (!due || claim.chip === "final") continue;
     const settled =
       claim.check.state === "done" || claim.check.state === "failed";
-    if (settled || claim.chip === "none") showChip(claim);
+    // A Short's claims go beside the video instead of on it.
+    if (!onShorts() && (settled || claim.chip === "none")) showChip(claim);
     claim.chip = settled ? "final" : "pending";
+    changed = true;
   }
+  if (changed) renderSide();
 }
 
 function showChip(claim: LiveClaim): void {
-  const player = document.getElementById("movie_player");
-  if (!enabled || !player) return;
+  const host = overlayHost();
+  if (!enabled || !host) return;
   let chips = document.getElementById(CHIPS_ID);
   if (!chips) {
     chips = element("div");
     chips.id = CHIPS_ID;
   }
-  if (chips.parentElement !== player) player.append(chips);
+  if (chips.parentElement !== host) host.append(chips);
   // The title bar's height changes with fullscreen and is 0 while hidden, so
   // keep the tallest seen; the style below keeps chips under the title while
   // the player's controls show.
-  const titleBar = player.querySelector(".ytp-chrome-top");
+  const titleBar = host.querySelector(".ytp-chrome-top");
   const height = titleBar?.getBoundingClientRect().height ?? 0;
   if (
     height > parseFloat(chips.style.getPropertyValue("--vfc-title-bar") || "0")
@@ -493,7 +532,7 @@ function scrollToOpen(): void {
 
 function render(): void {
   if (!enabled) {
-    for (const id of [TOGGLE_ID, PICK_ID, LIST_ID, CHIPS_ID])
+    for (const id of [TOGGLE_ID, PICK_ID, LIST_ID, CHIPS_ID, SIDE_ID])
       document.getElementById(id)?.remove();
     return;
   }
@@ -501,6 +540,7 @@ function render(): void {
   renderToggle();
   renderPickButton();
   renderList();
+  renderSide();
 }
 
 function renderPickButton(): void {
@@ -518,31 +558,61 @@ function renderPickButton(): void {
     });
   }
   if (button.previousElementSibling !== toggle) toggle.after(button);
-  button.hidden = toggle.hidden || status.state !== "ready";
+  // ponytail: no "Check this" on a Short yet; its top row has no room for a
+  // second button. Add it to the column beside the video if claims get missed.
+  button.hidden = toggle.hidden || status.state !== "ready" || onShorts();
   button.disabled = picking;
   button.textContent = picking ? "Checking…" : "Check this";
 }
 
-function toggleLabel(): string {
+/** `short` is for a Short, whose button shares a narrow row with YouTube's own. */
+function toggleLabel(short = false): string {
   switch (status.state) {
     case "idle":
       return "Fact-check";
     case "finding":
-      return "Finding claims…";
+      return short ? "Finding…" : "Finding claims…";
     case "noCaptions":
       return "No captions";
     case "error":
-      return "Couldn't check: retry";
+      return short ? "Retry" : "Couldn't check: retry";
     case "ready": {
       const count = status.claims.length;
-      if (count === 0) return "Nothing to check";
+      if (count === 0) return short ? "No claims" : "Nothing to check";
+      if (short) return shortsSummary(status.claims);
       return count === 1 ? "1 claim" : `${count} claims`;
     }
   }
 }
 
+/** A Short's verdicts at a glance, such as "✗ 1 · ✓ 2", once all are in. */
+function shortsSummary(claims: LiveClaim[]): string {
+  const tones = claims.map((claim) =>
+    claim.check.state === "done" || claim.check.state === "failed"
+      ? verdictLook(claim).tone
+      : null,
+  );
+  if (tones.includes(null)) return "Checking…";
+  const marks: [string, Tone][] = [
+    ["✗", "red"],
+    ["✓", "green"],
+    ["?", "grey"],
+  ];
+  return marks
+    .map(([mark, tone]) => [mark, tones.filter((t) => t === tone).length])
+    .filter(([, count]) => count !== 0)
+    .map(([mark, count]) => `${mark} ${count}`)
+    .join(" · ");
+}
+
 function renderToggle(): void {
-  const controls = document.querySelector(".ytp-right-controls");
+  // On a Short it joins the pause and volume buttons at the top of the video.
+  const shorts = onShorts();
+  const controls = document.querySelector(
+    shorts
+      ? "ytd-shorts-player-controls #left-controls"
+      : ".ytp-right-controls",
+  );
   if (!controls) return;
   let toggle = document.getElementById(TOGGLE_ID) as HTMLButtonElement | null;
   if (!toggle) {
@@ -557,9 +627,13 @@ function renderToggle(): void {
       render();
     });
   }
-  if (toggle.parentElement !== controls) controls.prepend(toggle);
+  if (toggle.parentElement !== controls) {
+    if (shorts) controls.append(toggle);
+    else controls.prepend(toggle);
+  }
+  toggle.dataset.shorts = String(shorts);
   toggle.hidden = currentVideoId() === null;
-  toggle.textContent = toggleLabel();
+  toggle.textContent = toggleLabel(shorts);
   toggle.dataset.state = status.state;
   toggle.title =
     status.state === "error"
@@ -570,9 +644,86 @@ function renderToggle(): void {
   toggle.setAttribute("aria-expanded", String(listOpen));
 }
 
+/** Closes the claim open beside a Short and keeps watching. */
+function closeClaim(): void {
+  openClaim = null;
+  render();
+  playerVideo()
+    ?.play()
+    .catch(() => {}); // Staying paused is fine.
+}
+
+/**
+ * On a Short, the claims in the empty space beside the video, each appearing
+ * as it's said; clicking one opens its explanation and sources in place. The
+ * toggle shows them all at once.
+ */
+function renderSide(): void {
+  const existing = document.getElementById(SIDE_ID);
+  const host = overlayHost();
+  if (!onShorts() || status.state !== "ready" || !host)
+    return existing?.remove();
+  const shown = status.claims.filter(
+    (claim) => listOpen || claim.chip !== "none" || claim === openClaim,
+  );
+  if (shown.length === 0) return existing?.remove();
+  const side = existing ?? element("section");
+  side.id = SIDE_ID;
+  side.setAttribute("aria-label", "Claims in this Short");
+  side.replaceChildren(...shown.map(sideItem));
+
+  // Left of the video, between it and YouTube's menu; in a window too narrow
+  // for that, over the foot of the video.
+  // ponytail: placed when drawn and on resize, so it sits where the Short was
+  // if YouTube shifts it (opening comments); follow the video if that jars.
+  const frame = host.getBoundingClientRect();
+  const pageLeft =
+    document.querySelector("ytd-shorts")?.getBoundingClientRect().left ?? 0;
+  const room = frame.left - pageLeft - 2 * SIDE_GAP;
+  const beside = room >= SIDE_MIN_WIDTH;
+  const width = Math.min(SIDE_MAX_WIDTH, room);
+  side.dataset.beside = String(beside);
+  side.style.cssText = beside
+    ? `left: ${frame.left - SIDE_GAP - width}px; top: ${frame.top}px; width: ${width}px; max-height: ${frame.height}px;`
+    : "";
+  const parent = beside ? document.body : host;
+  if (side.parentElement !== parent) parent.append(side);
+}
+
+function sideItem(claim: LiveClaim): HTMLElement {
+  const { label, tone } = verdictLook(claim);
+  const open = openClaim === claim;
+  const item = element("article", undefined, "vfc-side-item");
+  item.dataset.tone = tone;
+  item.dataset.settled = String(
+    claim.check.state === "done" || claim.check.state === "failed",
+  );
+  // Slides in once, not again each time the column is redrawn.
+  if (!sideSeen.has(claim)) {
+    sideSeen.add(claim);
+    item.classList.add("vfc-new");
+  }
+  const head = element("button", undefined, "vfc-side-head");
+  head.type = "button";
+  head.setAttribute("aria-expanded", String(open));
+  head.append(
+    element("strong", tone === "green" ? "✓ Supported" : label),
+    element("span", claim.claim),
+  );
+  head.addEventListener("click", () => {
+    if (open) return closeClaim();
+    openClaim = claim;
+    playerVideo()?.pause();
+    render();
+  });
+  item.append(head);
+  if (open) item.append(details(claim, true));
+  return item;
+}
+
 function renderList(): void {
   const existing = document.getElementById(LIST_ID);
-  if (!enabled || !listOpen || currentVideoId() === null)
+  if (!enabled || !listOpen || onShorts() || currentVideoId() === null)
     return existing?.remove();
   const list = existing ?? element("section");
   list.id = LIST_ID;
@@ -678,7 +829,8 @@ function listItem(claim: LiveClaim): HTMLElement {
   return item;
 }
 
-function details(claim: LiveClaim): HTMLElement {
+/** `compact` is for a Short's card: two sources at most, by title alone. */
+function details(claim: LiveClaim, compact = false): HTMLElement {
   const box = element("div", undefined, "vfc-details");
   switch (claim.check.state) {
     case "waiting":
@@ -703,13 +855,13 @@ function details(claim: LiveClaim): HTMLElement {
       box.append(element("p", explanation, "vfc-explanation"));
       if (sources.length === 0) break;
       const list = element("ul", undefined, "vfc-sources");
-      for (const source of sources) {
+      for (const source of compact ? sources.slice(0, 2) : sources) {
         const item = element("li");
         item.append(
           element("strong", source.stance, `vfc-stance-${source.stance}`),
           " ",
           sourceLink(source.url, source.title),
-          ` — ${source.says}`,
+          compact ? "" : ` — ${source.says}`,
         );
         list.append(item);
       }
@@ -911,6 +1063,44 @@ html[dark] #vfc-list {
 #vfc-list .vfc-sources a { color: var(--vfc-accent); }
 #vfc-list .vfc-action { height: 36px; margin: 0 8px 8px; padding: 0 16px; border: 0; border-radius: 18px; background: var(--vfc-hover); font-weight: 500; }
 #vfc-list .vfc-details .vfc-action { margin: 0; }
+
+/* On a Short: sized and coloured like its own pause and volume buttons. */
+#vfc-toggle[data-shorts="true"] {
+  height: 40px;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  font: 500 14px/40px Roboto, Arial, sans-serif;
+}
+#vfc-toggle[data-shorts="true"]:hover, #vfc-toggle[data-shorts="true"][aria-expanded="true"] { background: rgba(0, 0, 0, 0.55); }
+#vfc-toggle[data-shorts="true"][data-state="error"] { background: rgba(198, 40, 40, 0.75); }
+#vfc-side {
+  position: fixed;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  font: 400 14px/19px Roboto, Arial, sans-serif;
+}
+#vfc-side[data-beside="false"] { position: absolute; z-index: 62; left: 12px; right: 12px; bottom: 12px; max-height: 62%; }
+.vfc-side-item { flex: none; overflow: hidden; border-radius: 12px; background: #3d3d3d; color: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); }
+.vfc-side-item.vfc-new { animation: vfc-in 0.3s cubic-bezier(0.05, 0, 0, 1); }
+.vfc-side-item[data-settled="true"] { background: #455a64; }
+.vfc-side-item[data-settled="true"][data-tone="green"] { background: #1e7d3a; }
+.vfc-side-item[data-settled="true"][data-tone="red"] { background: #c62828; }
+.vfc-side-head { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 10px 14px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.vfc-side-head strong { font-weight: 700; }
+.vfc-side-head:hover { background: rgba(255, 255, 255, 0.1); }
+.vfc-side-head:focus-visible, .vfc-side-item .vfc-action:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.vfc-side-item .vfc-details { padding: 10px 14px 12px; background: rgba(0, 0, 0, 0.3); font-size: 13px; line-height: 18px; }
+.vfc-side-item .vfc-explanation, .vfc-side-item .vfc-note { margin: 0 0 8px; }
+.vfc-side-item .vfc-explanation:last-child { margin: 0; }
+.vfc-side-item .vfc-sources { margin: 0; padding: 0; list-style: none; color: rgba(255, 255, 255, 0.8); font-size: 12px; }
+.vfc-side-item .vfc-sources a { color: #fff; text-decoration: underline; }
+.vfc-side-item .vfc-action { height: 32px; padding: 0 14px; border: 0; border-radius: 16px; background: rgba(255, 255, 255, 0.2); color: #fff; font: 500 13px/32px Roboto, Arial, sans-serif; cursor: pointer; }
 `;
 
 // Media events don't bubble, so listen in the capture phase, and only to the
@@ -919,6 +1109,14 @@ document.addEventListener(
   "timeupdate",
   (event) => {
     if (event.target !== playerVideo() || extensionGone()) return;
+    // YouTube builds a Short's controls after the video starts.
+    if (enabled && !document.getElementById(TOGGLE_ID)) render();
+    if (
+      allShorts &&
+      onShorts() &&
+      (event.target as HTMLVideoElement).currentTime >= SHORTS_START_SECONDS
+    )
+      start();
     checkAhead();
     showDueChips();
   },
@@ -928,10 +1126,12 @@ document.addEventListener(
   "seeked",
   (event) => {
     if (event.target !== playerVideo() || status.state !== "ready") return;
-    // Going back shows the chips again for the claims ahead.
+    // Going back shows the chips again for the claims ahead. Not on a Short,
+    // which starts over by itself: the claims beside it stay.
     const now = (event.target as HTMLVideoElement).currentTime;
-    for (const claim of status.claims)
-      if (claim.seconds > now) claim.chip = "none";
+    if (!onShorts())
+      for (const claim of status.claims)
+        if (claim.seconds > now) claim.chip = "none";
     checkAhead();
   },
   true,
@@ -945,7 +1145,12 @@ document.addEventListener(
     const target = event.target as HTMLElement | null;
     if (target?.closest("input, textarea, [contenteditable]")) return;
     // While off, V goes back to YouTube.
-    if (!enabled || status.state !== "ready" || currentVideoId() === null)
+    if (
+      !enabled ||
+      status.state !== "ready" ||
+      currentVideoId() === null ||
+      onShorts()
+    )
       return;
     event.preventDefault();
     void checkWhatWasJustSaid();
@@ -956,6 +1161,9 @@ document.addEventListener(
 document.addEventListener("yt-navigate-finish", () => {
   if (statusVideoId === currentVideoId()) return render();
   channel = null;
+  openClaim = null;
+  // The next Short's claims appear as they're said, not all at once.
+  if (onShorts()) listOpen = false;
   setStatus({ state: "idle" });
   if (enabled) tellPageHook("describeVideo");
 });

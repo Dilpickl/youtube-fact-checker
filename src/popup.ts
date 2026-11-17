@@ -1,9 +1,11 @@
-// The popup that opens from the extension's icon: the on/off switch, the
-// video on the tab in front (start it, or always check its channel), and how
-// much of today's budget is left.
+// The popup that opens from the extension's icon: the big on/off button, the
+// video on the tab in front (start it, or always check its channel), the
+// setting for Shorts, and how much of today's budget is left.
 import {
+  ALL_SHORTS_KEY,
   CHANNELS_KEY,
   ENABLED_KEY,
+  readAllShorts,
   readChannels,
   readEnabled,
   type BudgetResponse,
@@ -19,16 +21,21 @@ function byId<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
 
-const enabledSwitch = byId<HTMLInputElement>("enabled");
-const enabledLabel = byId("enabled-label");
+const power = byId<HTMLButtonElement>("enabled");
+const powerLabel = byId("enabled-label");
+const powerHint = byId("enabled-hint");
+const settings = byId("settings");
 const videoSection = byId("video");
 const startButton = byId<HTMLButtonElement>("start");
 const channelRow = byId("channel-row");
 const channelLabel = byId("channel-label");
 const channelSwitch = byId<HTMLInputElement>("channel");
+const allShortsSwitch = byId<HTMLInputElement>("all-shorts");
 const hint = byId("hint");
-const budget = byId("budget");
+const budgetText = byId("budget-text");
+const budgetBar = byId("budget-bar");
 
+let enabled = true;
 let channel: NonNullable<PopupState>["channel"] = null;
 
 /** Asks the content script on the tab in front; null when it isn't a YouTube video. */
@@ -49,12 +56,8 @@ async function askTab(type: PopupRequest["type"]): Promise<PopupState> {
 }
 
 async function showVideo(state: PopupState): Promise<void> {
-  const enabled = enabledSwitch.checked;
   videoSection.hidden = !enabled || !state;
-  hint.hidden = !videoSection.hidden;
-  hint.textContent = enabled
-    ? "Open a YouTube video to fact-check it. If one is already open, reload its tab."
-    : "Turn it on to fact-check YouTube videos.";
+  hint.hidden = !enabled || !videoSection.hidden;
   if (!state) return;
   startButton.textContent =
     state.label === "Fact-check" ? "Fact-check this video" : state.label;
@@ -66,11 +69,16 @@ async function showVideo(state: PopupState): Promise<void> {
   channelSwitch.checked = channel.id in (await readChannels());
 }
 
-function showEnabled(enabled: boolean): void {
-  enabledSwitch.checked = enabled;
-  enabledLabel.textContent = enabled
+function showEnabled(next: boolean): void {
+  enabled = next;
+  power.setAttribute("aria-checked", String(enabled));
+  powerLabel.textContent = enabled
     ? "Fact-checking is on"
     : "Fact-checking is off";
+  powerHint.textContent = enabled
+    ? "Click to turn it off"
+    : "Click to turn it on";
+  settings.hidden = !enabled;
 }
 
 async function showBudget(): Promise<void> {
@@ -78,14 +86,17 @@ async function showBudget(): Promise<void> {
   const response: BudgetResponse | undefined = await chrome.runtime
     .sendMessage(request)
     .catch(() => undefined);
-  budget.textContent = response?.ok
-    ? `Today's budget: $${response.left.toFixed(2)} of $${response.cap.toFixed(2)} left`
-    : "Today's budget: couldn't reach the server";
+  if (!response?.ok) {
+    budgetText.textContent = "Couldn't reach the server";
+    return;
+  }
+  budgetText.textContent = `$${response.left.toFixed(2)} of $${response.cap.toFixed(2)} left`;
+  budgetBar.style.width = `${(100 * response.left) / response.cap}%`;
 }
 
-enabledSwitch.addEventListener("change", async () => {
-  showEnabled(enabledSwitch.checked);
-  await chrome.storage.local.set({ [ENABLED_KEY]: enabledSwitch.checked });
+power.addEventListener("click", async () => {
+  showEnabled(!enabled);
+  await chrome.storage.local.set({ [ENABLED_KEY]: enabled });
   await showVideo(await askTab("popupState"));
 });
 startButton.addEventListener("click", async () => {
@@ -98,9 +109,15 @@ channelSwitch.addEventListener("change", async () => {
   else delete channels[channel.id];
   await chrome.storage.local.set({ [CHANNELS_KEY]: channels });
 });
+allShortsSwitch.addEventListener("change", async () => {
+  await chrome.storage.local.set({
+    [ALL_SHORTS_KEY]: allShortsSwitch.checked,
+  });
+});
 
 async function open(): Promise<void> {
   showEnabled(await readEnabled());
+  allShortsSwitch.checked = await readAllShorts();
   await showVideo(await askTab("popupState"));
   void showBudget();
   setInterval(async () => showVideo(await askTab("popupState")), REFRESH_MS);

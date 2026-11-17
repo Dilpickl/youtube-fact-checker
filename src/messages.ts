@@ -25,6 +25,14 @@ export async function readChannels(): Promise<Channels> {
   return (stored[CHANNELS_KEY] as Channels | undefined) ?? {};
 }
 
+/** The saved setting to fact-check every Short without being asked; off at first. */
+export const ALL_SHORTS_KEY = "allShorts";
+
+export async function readAllShorts(): Promise<boolean> {
+  const stored = await chrome.storage.local.get(ALL_SHORTS_KEY);
+  return stored[ALL_SHORTS_KEY] === true;
+}
+
 /** What page-hook.ts finds out about a video and its captions. */
 export type PageHookMessage = {
   source: typeof PAGE_HOOK_SOURCE;

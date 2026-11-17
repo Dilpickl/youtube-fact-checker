@@ -12,7 +12,13 @@ import {
   type ContentMessage,
   type PageHookMessage,
 } from "./messages.ts";
-import { parseJson3, pickCaptionTrack, type CaptionTrack } from "./youtube.ts";
+import {
+  parseJson3,
+  pickCaptionTrack,
+  playerIdOf,
+  videoIdOf,
+  type CaptionTrack,
+} from "./youtube.ts";
 
 const PLAYER_WAIT_MS = 30_000;
 // Long enough for ads, or for a viewer who opens a video and presses play later.
@@ -33,7 +39,7 @@ interface PlayerResponse {
   };
 }
 
-/** The parts of YouTube's player element (#movie_player) used here. */
+/** The parts of YouTube's player element (#movie_player, or #shorts-player) used here. */
 interface Player extends HTMLElement {
   getPlayerResponse(): PlayerResponse | undefined;
   /** -1 until the video starts; YouTube reports the ad's state during an ad. */
@@ -65,16 +71,17 @@ let readingVideoId: string | null = null;
 /** True while the extension is off; a read in progress gives up when it sees this. */
 let stopped = false;
 
-/** The video on the page, from its address; null off a watch page. */
+/** The video on the page, from its address; null when it isn't a video or a Short. */
 function currentVideoId(): string | null {
-  if (location.pathname !== "/watch") return null;
-  return new URLSearchParams(location.search).get("v");
+  return videoIdOf(location.pathname, location.search);
 }
 
 /** The player, once it describes this video rather than the one before it. */
 function playerFor(videoId: string): Promise<Player> {
   return waitFor(() => {
-    const element = document.getElementById("movie_player") as Player | null;
+    const element = document.getElementById(
+      playerIdOf(location.pathname),
+    ) as Player | null;
     const playing = element?.getPlayerResponse?.()?.videoDetails?.videoId;
     return playing === videoId ? element : null;
   }, "YouTube's player didn't load");

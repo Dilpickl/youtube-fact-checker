@@ -13,6 +13,12 @@ sources. Press V or "Check this" to check something the list missed. The
 extension's icon opens a popup with the on/off switch, a switch to always
 check the current video's channel, and what is left of today's budget.
 
+On a Short, the **Fact-check** button sits with the Short's own pause and
+volume buttons. Verdict chips appear on the video as claims are said, and
+clicking one (or the button) pauses the Short and opens that claim as a small
+card on the video, one claim at a time. Shorts are checked only when asked,
+unless "Check every Short" is on in the popup.
+
 It has two parts: the extension, and a small server that holds the Anthropic
 API key (it can't go inside the extension, where anyone could read it) and
 asks Claude for the claims and verdicts. The server is hosted on Render, so

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Video Fact Check",
-  "version": "0.3.0",
-  "description": "Fact-checks the claims in a YouTube video as you watch, when you ask.",
+  "version": "0.4.0",
+  "description": "Fact-checks the claims in a YouTube video or Short as you watch, when you ask.",
   "minimum_chrome_version": "111",
   "background": { "service_worker": "dist/background.js" },
   "action": {

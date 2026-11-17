@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { playerIdOf, videoIdOf } from "../src/youtube.ts";
 import {
   formatTime,
   parseJson3,
@@ -70,4 +71,13 @@ test("a claim's time is when its quote starts, not when its line does", () => {
   assert.equal(quoteStart(cues, quote, 271), 274.5);
   // A quote the model reworded falls back to the line's start.
   assert.equal(quoteStart(cues, "roughly three years", 271), 271);
+});
+
+test("a Short's address gives its video and its own player", () => {
+  assert.equal(videoIdOf("/shorts/LEdoEbjpBqk", ""), "LEdoEbjpBqk");
+  assert.equal(playerIdOf("/shorts/LEdoEbjpBqk"), "shorts-player");
+  assert.equal(videoIdOf("/watch", "?v=hmkoFDMAvkc&t=10"), "hmkoFDMAvkc");
+  assert.equal(playerIdOf("/watch"), "movie_player");
+  assert.equal(videoIdOf("/shorts", ""), null);
+  assert.equal(videoIdOf("/results", "?search_query=v"), null);
 });

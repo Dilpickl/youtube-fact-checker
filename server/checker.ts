@@ -54,6 +54,8 @@ export type Claim = Pick<
 
 const VerdictSchema = z.object({
   verdict: z.enum(["supported", "contradicted", "misleading", "unverified"]),
+  /** What the verdict rests on: sources found, or working it out. */
+  method: z.enum(["sources", "calculation"]),
   explanation: z.string(),
   sources: z.array(
     z.object({
@@ -74,6 +76,8 @@ Transcripts are often automatic captions: names may be misspelled and punctuatio
 
 Return at most ${MAX_CLAIMS} claims, choosing the ones a viewer would most want checked: specific, consequential, or surprising. Skip near-duplicates.`;
 
+// ponytail: the model does the arithmetic itself; give it the code execution
+// tool if it gets sums wrong.
 const CHECK_CLAIM = `You check one claim from a video against sources found with web search.
 
 Verdicts:
@@ -81,6 +85,8 @@ Verdicts:
 - contradicted: reliable sources say otherwise. When the claim's central specific (a number, timespan, or effect) is wrong, it is contradicted even if a related fact is true; don't soften it to misleading.
 - misleading: partly true, but a viewer would come away believing something false, and you can name that false belief. A missing qualifier, nuance the claim leaves out, or a debate among experts the claim takes one mainstream side of, is not enough on its own: if the core of the claim holds, it is supported, and the nuance goes in the explanation. But stretching what's true of one case to a whole group (one oil's history told as all seed oils') is misleading.
 - unverified: the sources found don't address it. This is an honest answer, not a failure; prefer it over guessing. But a specific claim that no research supports, where reliable sources say the effect it describes doesn't exist, is contradicted.
+
+A claim that is pure arithmetic, mathematics, or logic (an equation, a unit conversion, a percentage worked from numbers the claim itself gives) needs no source and no search: work it out yourself, step by step, and answer supported or contradicted, never unverified. Set method to "calculation", list no sources, and put the working in the explanation. Every other claim has method "sources".
 
 Judge the claim as stated, not a stronger version of it: don't call it misleading or contradicted for something it doesn't say (a claim about a person's own ideal isn't a claim about a universal one). Sources must speak to the claim as stated: guidelines or recommendations about what people should do don't contradict a claim about what they actually do. When the claim is that someone said or reported something, judge whether they said it, not whether it is true. For a forecast, judge whether it matches what experts actually forecast. Prefer primary sources, scientific reviews, and established outlets over blogs. Keep the explanation to two sentences a viewer could read mid-video. List only sources you actually found, each with what it says about the claim and its stance: supports, contradicts, or context when it only adds background or is mixed.`;
 

@@ -196,12 +196,20 @@ export function pickLimit(now: number): string | null {
   return null;
 }
 
-/** No source, no verdict: one without sources rests on the model's memory. */
+/**
+ * No source, no verdict: one without sources rests on the model's memory.
+ * Except mathematics, which is worked out rather than looked up.
+ */
 export function sourcedOnly(verdict: Verdict): Verdict {
-  if (verdict.sources.length > 0 || verdict.verdict === "unverified")
+  if (
+    verdict.sources.length > 0 ||
+    verdict.verdict === "unverified" ||
+    verdict.method === "calculation"
+  )
     return verdict;
   return {
     verdict: "unverified",
+    method: "sources",
     explanation: "The web search found no sources to check this against.",
     sources: [],
   };

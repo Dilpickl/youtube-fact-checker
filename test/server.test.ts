@@ -84,10 +84,14 @@ test("checking what was just said can't be spammed", () => {
 test("no source, no verdict", () => {
   const fromMemory = {
     verdict: "contradicted" as const,
+    method: "sources" as const,
     explanation: "From what I remember, this is false.",
     sources: [],
   };
   assert.equal(sourcedOnly(fromMemory).verdict, "unverified");
+  // Mathematics is worked out, not looked up.
+  const workedOut = { ...fromMemory, method: "calculation" as const };
+  assert.equal(sourcedOnly(workedOut), workedOut);
   const sourced = {
     ...fromMemory,
     sources: [
