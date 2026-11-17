@@ -50,8 +50,12 @@ const SIDE_ID = "vfc-side";
 const SIDE_MAX_WIDTH = 340;
 const SIDE_MIN_WIDTH = 220;
 const SIDE_GAP = 16;
-// With "every Short" on, one swiped past sooner than this costs nothing.
-const SHORTS_START_SECONDS = 3;
+// With "every Short" on, one flicked past sooner than this costs nothing.
+const SHORTS_START_SECONDS = 0.5;
+// A claim beside a Short takes this long to fade out, and the column checks
+// this often that it's still next to the video.
+const POP_FADE_MS = 400;
+const SIDE_FOLLOW_MS = 250;
 const STYLE_ID = "vfc-style";
 // Checks run this far ahead of the playhead, so verdicts are ready when a
 // claim is said and nothing past where the viewer stops gets paid for.
@@ -76,6 +80,8 @@ type Check =
 interface LiveClaim extends Claim {
   /** When it's said, in seconds. */
   seconds: number;
+  /** On a Short: when its pop-up beside the video fades (a Date.now() time). */
+  popUntil?: number;
   check: Check;
   /** Its chip so far: none yet, one while checking, or one with the verdict. */
   chip: "none" | "pending" | "final";
@@ -118,6 +124,8 @@ const chipTimers = new WeakMap<HTMLElement, number>();
 const chipsByClaim = new WeakMap<LiveClaim, HTMLButtonElement>();
 /** Claims already shown beside a Short. */
 const sideSeen = new WeakSet<LiveClaim>();
+/** The timer that keeps the claims beside a Short as YouTube moves it. */
+let sideFollowing: number | undefined;
 
 /** The video on the page, from its address; null when it isn't a video or a Short. */
 function currentVideoId(): string | null {
@@ -380,9 +388,26 @@ function showDueChips(): void {
     // A Short's claims go beside the video instead of on it.
     if (!onShorts() && (settled || claim.chip === "none")) showChip(claim);
     claim.chip = settled ? "final" : "pending";
+    if (onShorts()) popBeside(claim);
     changed = true;
   }
   if (changed) renderSide();
+}
+
+/** On a Short, shows a claim beside the video for as long as its chip would last. */
+function popBeside(claim: LiveClaim): void {
+  const settled =
+    claim.check.state === "done" || claim.check.state === "failed";
+  const shown = !settled
+    ? CHECKING_CHIP_MS
+    : verdictLook(claim).tone === "red"
+      ? RED_CHIP_MS
+      : VERDICT_CHIP_MS;
+  claim.popUntil = Date.now() + shown;
+  sideSeen.delete(claim); // Slides in again with its verdict.
+  // Once to start the fade, once to take it away.
+  setTimeout(renderSide, shown - POP_FADE_MS + 20);
+  setTimeout(renderSide, shown + 20);
 }
 
 function showChip(claim: LiveClaim): void {
@@ -654,40 +679,79 @@ function closeClaim(): void {
 }
 
 /**
- * On a Short, the claims in the empty space beside the video, each appearing
- * as it's said; clicking one opens its explanation and sources in place. The
- * toggle shows them all at once.
+ * On a Short, claims pop up in the empty space beside the video as they're
+ * said and fade after a few seconds, like the chips on a long video. The
+ * toggle pulls them all up as a panel that stays; clicking a claim opens its
+ * explanation and sources in place.
  */
 function renderSide(): void {
   const existing = document.getElementById(SIDE_ID);
-  const host = overlayHost();
-  if (!onShorts() || status.state !== "ready" || !host)
-    return existing?.remove();
+  const removeSide = () => {
+    existing?.remove();
+    clearInterval(sideFollowing);
+    sideFollowing = undefined;
+  };
+  if (!onShorts() || status.state !== "ready" || !overlayHost())
+    return removeSide();
+  const now = Date.now();
   const shown = status.claims.filter(
-    (claim) => listOpen || claim.chip !== "none" || claim === openClaim,
+    (claim) => listOpen || claim === openClaim || now < (claim.popUntil ?? 0),
   );
-  if (shown.length === 0) return existing?.remove();
+  if (shown.length === 0) return removeSide();
   const side = existing ?? element("section");
   side.id = SIDE_ID;
   side.setAttribute("aria-label", "Claims in this Short");
-  side.replaceChildren(...shown.map(sideItem));
+  const items = shown.map((claim) => {
+    const item = sideItem(claim);
+    const leaving =
+      !listOpen &&
+      claim !== openClaim &&
+      now > (claim.popUntil ?? 0) - POP_FADE_MS;
+    item.classList.toggle("vfc-leaving", leaving);
+    return item;
+  });
+  side.replaceChildren(...(listOpen ? [sideHeader()] : []), ...items);
+  if (!side.isConnected) document.body.append(side);
+  placeSide();
+  // YouTube slides the Short aside for comments and resizes it with the
+  // window, so keep following it for as long as anything is shown.
+  sideFollowing ??= window.setInterval(placeSide, SIDE_FOLLOW_MS);
+}
 
-  // Left of the video, between it and YouTube's menu; in a window too narrow
-  // for that, over the foot of the video.
-  // ponytail: placed when drawn and on resize, so it sits where the Short was
-  // if YouTube shifts it (opening comments); follow the video if that jars.
+/** Puts the claims left of the Short; over its foot when there's no room there. */
+function placeSide(): void {
+  const side = document.getElementById(SIDE_ID);
+  const host = overlayHost();
+  if (!side || !host) return;
   const frame = host.getBoundingClientRect();
   const pageLeft =
     document.querySelector("ytd-shorts")?.getBoundingClientRect().left ?? 0;
   const room = frame.left - pageLeft - 2 * SIDE_GAP;
   const beside = room >= SIDE_MIN_WIDTH;
   const width = Math.min(SIDE_MAX_WIDTH, room);
-  side.dataset.beside = String(beside);
-  side.style.cssText = beside
-    ? `left: ${frame.left - SIDE_GAP - width}px; top: ${frame.top}px; width: ${width}px; max-height: ${frame.height}px;`
+  const place = beside
+    ? `left: ${Math.round(frame.left - SIDE_GAP - width)}px; top: ${Math.round(frame.top)}px; width: ${Math.round(width)}px; max-height: ${Math.round(frame.height)}px;`
     : "";
+  // Only when it moved, so a still Short costs nothing.
+  if (side.style.cssText !== place) side.style.cssText = place;
+  side.dataset.beside = String(beside);
   const parent = beside ? document.body : host;
   if (side.parentElement !== parent) parent.append(side);
+}
+
+function sideHeader(): HTMLElement {
+  const close = element("button", "×", "vfc-side-close");
+  close.type = "button";
+  close.title = "Close";
+  close.setAttribute("aria-label", "Close");
+  close.addEventListener("click", () => {
+    listOpen = false;
+    if (openClaim) return closeClaim();
+    render();
+  });
+  const header = element("header");
+  header.append(element("strong", "Claims in this Short"), close);
+  return header;
 }
 
 function sideItem(claim: LiveClaim): HTMLElement {
@@ -1082,25 +1146,33 @@ html[dark] #vfc-list {
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
   font: 400 14px/19px Roboto, Arial, sans-serif;
+  transition: left 0.25s, top 0.25s;
 }
 #vfc-side[data-beside="false"] { position: absolute; z-index: 62; left: 12px; right: 12px; bottom: 12px; max-height: 62%; }
-.vfc-side-item { flex: none; overflow: hidden; border-radius: 12px; background: #3d3d3d; color: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); }
+#vfc-side header { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 2px 14px; border-radius: 12px; background: rgba(28, 28, 28, 0.72); backdrop-filter: blur(10px); color: #f1f1f1; }
+.vfc-side-close { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; font: 400 20px/32px Roboto, Arial, sans-serif; cursor: pointer; }
+.vfc-side-close:hover { background: rgba(255, 255, 255, 0.15); }
+/* Dark glass with the verdict as a coloured edge and label, not a solid block. */
+.vfc-side-item { flex: none; overflow: hidden; border-left: 3px solid #78909c; border-radius: 12px; background: rgba(28, 28, 28, 0.72); backdrop-filter: blur(10px); color: #f1f1f1; }
 .vfc-side-item.vfc-new { animation: vfc-in 0.3s cubic-bezier(0.05, 0, 0, 1); }
-.vfc-side-item[data-settled="true"] { background: #455a64; }
-.vfc-side-item[data-settled="true"][data-tone="green"] { background: #1e7d3a; }
-.vfc-side-item[data-settled="true"][data-tone="red"] { background: #c62828; }
-.vfc-side-head { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 10px 14px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.vfc-side-head strong { font-weight: 700; }
-.vfc-side-head:hover { background: rgba(255, 255, 255, 0.1); }
-.vfc-side-head:focus-visible, .vfc-side-item .vfc-action:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
-.vfc-side-item .vfc-details { padding: 10px 14px 12px; background: rgba(0, 0, 0, 0.3); font-size: 13px; line-height: 18px; }
+.vfc-side-item.vfc-leaving { animation: vfc-out 0.4s ease-in forwards; }
+.vfc-side-item[data-settled="true"][data-tone="green"] { border-left-color: #2e9d57; }
+.vfc-side-item[data-settled="true"][data-tone="red"] { border-left-color: #e0483e; }
+.vfc-side-head { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 9px 14px 10px 12px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.vfc-side-head strong { color: #b0bec5; font-size: 13px; font-weight: 700; }
+.vfc-side-item[data-settled="true"][data-tone="green"] .vfc-side-head strong { color: #5fdc8a; }
+.vfc-side-item[data-settled="true"][data-tone="red"] .vfc-side-head strong { color: #ff7b72; }
+.vfc-side-head:hover { background: rgba(255, 255, 255, 0.08); }
+.vfc-side-head:focus-visible, .vfc-side-close:focus-visible, .vfc-side-item .vfc-action:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.vfc-side-item .vfc-details { padding: 10px 14px 12px 12px; border-top: 1px solid rgba(255, 255, 255, 0.12); color: #ddd; font-size: 13px; line-height: 18px; }
 .vfc-side-item .vfc-explanation, .vfc-side-item .vfc-note { margin: 0 0 8px; }
 .vfc-side-item .vfc-explanation:last-child { margin: 0; }
-.vfc-side-item .vfc-sources { margin: 0; padding: 0; list-style: none; color: rgba(255, 255, 255, 0.8); font-size: 12px; }
-.vfc-side-item .vfc-sources a { color: #fff; text-decoration: underline; }
-.vfc-side-item .vfc-action { height: 32px; padding: 0 14px; border: 0; border-radius: 16px; background: rgba(255, 255, 255, 0.2); color: #fff; font: 500 13px/32px Roboto, Arial, sans-serif; cursor: pointer; }
+.vfc-side-item .vfc-sources { margin: 0; padding: 0; list-style: none; color: #aaa; font-size: 12px; }
+.vfc-side-item .vfc-sources a { color: #3ea6ff; }
+.vfc-side-item .vfc-action { height: 32px; padding: 0 14px; border: 0; border-radius: 16px; background: rgba(255, 255, 255, 0.15); color: #fff; font: 500 13px/32px Roboto, Arial, sans-serif; cursor: pointer; }
+@keyframes vfc-out { to { opacity: 0; transform: translateX(-12px); } }
 `;
 
 // Media events don't bubble, so listen in the capture phase, and only to the

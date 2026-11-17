@@ -8,6 +8,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
+import { connect } from "node:net";
 import {
   checkClaim,
   costOf,
@@ -76,6 +77,7 @@ export async function handle(
     typeof body === "object" && body !== null ? { ...body } : {},
   );
   send(response, answer.status, answer.body);
+  void saveSpend();
 }
 
 const ROUTES: Record<string, Route> = {
@@ -154,11 +156,16 @@ ${excerpt}`,
   },
 };
 
-// ponytail: counted in memory, so a restart (Render's free tier sleeps when
-// idle) starts the day over; prepaid credits with auto-reload off are the hard
-// limit. Keep the day's spend in a database if the cap gets dodged that way.
+// The day's spend also goes to a small key-value store (REDIS_URL, set on
+// Render), because Render's free plan restarts the server whenever it has
+// been idle and a count kept only in memory would start over each time.
+// Without the store, as on Dylan's laptop, the count is in memory alone.
+const STORE_URL = process.env.REDIS_URL;
+const STORE_TIMEOUT_MS = 3000;
 let capDay = "";
 let spentBeforeToday = 0;
+/** What the store says was spent today before this run of the server. */
+let carriedToday = 0;
 
 /** Dollars spent today (UTC); `spent` is the total since the server started. */
 function spentToday(now: number, spent: number): number {
@@ -166,8 +173,67 @@ function spentToday(now: number, spent: number): number {
   if (day !== capDay) {
     capDay = day;
     spentBeforeToday = spent;
+    carriedToday = 0;
   }
-  return spent - spentBeforeToday;
+  return spent - spentBeforeToday + carriedToday;
+}
+
+function storeKey(now: number): string {
+  return `spent:${new Date(now).toISOString().slice(0, 10)}`;
+}
+
+/** Picks up the day's spend from before a restart. */
+async function loadSpend(): Promise<void> {
+  if (!STORE_URL) return;
+  const now = Date.now();
+  spentToday(now, costOf(totals)); // Sets the day, so the next call keeps this.
+  carriedToday = Number(await askStore("GET", storeKey(now))) || 0;
+  console.log(`Spent earlier today: about $${carriedToday.toFixed(3)}`);
+}
+
+/** Writes the day's spend down; a failure only costs accuracy after a restart. */
+async function saveSpend(): Promise<void> {
+  if (!STORE_URL) return;
+  const now = Date.now();
+  const spent = spentToday(now, costOf(totals)).toFixed(6);
+  // Kept two days, so yesterday's key cleans itself up.
+  await askStore("SET", storeKey(now), spent, "EX", "172800").catch((error) =>
+    console.error(`Couldn't save today's spend: ${error}`),
+  );
+}
+
+/**
+ * Sends one command to the Redis-compatible store and returns its reply.
+ * ponytail: a connection per command and replies of one value only, which is
+ * all GET and SET need; use a Redis client library if this grows.
+ */
+function askStore(...command: string[]): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const { hostname, port } = new URL(STORE_URL ?? "");
+    const socket = connect(Number(port) || 6379, hostname);
+    socket.setTimeout(STORE_TIMEOUT_MS, () =>
+      socket.destroy(new Error("the store didn't answer")),
+    );
+    socket.on("error", reject);
+    socket.write(
+      `*${command.length}\r\n` +
+        command
+          .map((part) => `$${Buffer.byteLength(part)}\r\n${part}\r\n`)
+          .join(""),
+    );
+    let reply = "";
+    socket.on("data", (chunk) => {
+      reply += chunk;
+      const lines = reply.split("\r\n");
+      // "$5" then the value on its own line, "$-1" for nothing, "+OK", "-ERR".
+      const hasValue = reply.startsWith("$") && lines[0] !== "$-1";
+      if (lines.length < (hasValue ? 3 : 2)) return;
+      socket.end();
+      if (reply.startsWith("-")) reject(new Error(lines[0]));
+      else if (!reply.startsWith("$")) resolve(lines[0].slice(1));
+      else resolve(hasValue ? lines[1] : null);
+    });
+  });
 }
 
 /**
@@ -285,6 +351,9 @@ function send(response: ServerResponse, status: number, body: object) {
 }
 
 if (import.meta.main) {
+  await loadSpend().catch((error) =>
+    console.error(`Couldn't read today's spend: ${error}`),
+  );
   createServer((request, response) => {
     handle(request, response).catch((error) => {
       console.error(error);

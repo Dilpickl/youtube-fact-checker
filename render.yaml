@@ -10,5 +10,16 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Where the day's spend is kept, so the budget survives restarts.
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: video-fact-check-budget
+          property: connectionString
       - key: NODE_VERSION
         value: 24.16.0
+  - type: keyvalue
+    name: video-fact-check-budget
+    plan: free
+    # No addresses outside Render may connect; the server reaches it privately.
+    ipAllowList: []
