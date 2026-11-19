@@ -50,12 +50,9 @@ const MARKS_ID = "vfc-marks";
 // when the window leaves less than the minimum.
 const SIDE_MAX_WIDTH = 340;
 const SIDE_MIN_WIDTH = 220;
-// The claims panel beside a Short, and the room YouTube's like, comment, and
-// share buttons take up to the right of the video.
-const PANEL_MAX_WIDTH = 400;
-const PANEL_MIN_WIDTH = 300;
-const SHORTS_BUTTONS_WIDTH = 104;
 const SIDE_GAP = 16;
+const THEIR_PANEL =
+  'ytd-shorts ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]';
 // With "every Short" on, one flicked past sooner than this costs nothing.
 const SHORTS_START_SECONDS = 0.5;
 // A claim beside a Short takes this long to fade out, and the column checks
@@ -576,7 +573,7 @@ function render(): void {
   if (!enabled) {
     for (const id of [TOGGLE_ID, PICK_ID, LIST_ID, CHIPS_ID, SIDE_ID, MARKS_ID])
       document.getElementById(id)?.remove();
-    return;
+    return releaseCommentsSlot();
   }
   addStyle();
   renderToggle();
@@ -829,7 +826,9 @@ function followShort(): void {
   const side = document.getElementById(SIDE_ID);
   const list = document.getElementById(LIST_ID);
   const host = overlayHost();
-  if (!onShorts() || !host || (!side && !list)) {
+  // A copy left behind when the extension is reloaded stops here, rather than
+  // waiting for the video to play.
+  if (extensionGone() || !onShorts() || !host || (!side && !list)) {
     clearInterval(following);
     following = undefined;
     return;
@@ -856,44 +855,92 @@ function followShort(): void {
     const parent = beside ? document.body : host;
     if (side.parentElement !== parent) parent.append(side);
   }
-  if (list) {
-    // The panel: right of the Short's buttons, where comments open. When
-    // comments (or another YouTube panel) are there, or the window is too
-    // narrow, it takes the left side instead.
-    const theirs = document.querySelector(
-      'ytd-shorts ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]',
-    );
-    const rightLeft = frame.right + SHORTS_BUTTONS_WIDTH;
-    const rightRoom = window.innerWidth - rightLeft - SIDE_GAP;
-    if (!theirs && rightRoom >= PANEL_MIN_WIDTH)
-      place(list, rightLeft, Math.min(PANEL_MAX_WIDTH, rightRoom));
-    else if (leftRoom >= PANEL_MIN_WIDTH) {
-      const width = Math.min(PANEL_MAX_WIDTH, leftRoom);
-      place(list, frame.left - SIDE_GAP - width, width);
-    } else {
-      // ponytail: no room on either side, so it covers the page's right
-      // edge; dock it under the Short if narrow windows matter.
-      place(
-        list,
-        window.innerWidth - SIDE_GAP - PANEL_MIN_WIDTH,
-        PANEL_MIN_WIDTH,
-      );
+  if (list) placeInCommentsSlot(list);
+}
+
+/**
+ * The claims panel's hold on YouTube's comments slot: "opening" from asking
+ * YouTube for its comments until they show, "open" while the panel covers
+ * them, "none" otherwise.
+ */
+let slot: "none" | "opening" | "open" = "none";
+
+/** The Short's comments button. */
+function commentsButton(): HTMLElement | null {
+  const bar = player()
+    ?.closest("ytd-reel-video-renderer")
+    ?.querySelector("reel-action-bar-view-model");
+  // ponytail: found by its English label, as YouTube gives it no id; other
+  // languages get the fallback place below.
+  return (
+    [...(bar?.querySelectorAll<HTMLElement>("button") ?? [])].find((button) =>
+      /comment/i.test(button.getAttribute("aria-label") ?? ""),
+    ) ?? null
+  );
+}
+
+/**
+ * Lays the panel exactly over YouTube's own comments panel, which it opens,
+ * so YouTube moves the Short aside and sizes the slot itself, at every window
+ * size. Copying YouTube's layout instead squeezed and stretched the video on
+ * some versions of the page. When YouTube closes its panel (a click on the
+ * dimmed page around it, or the next Short), this one closes too.
+ */
+function placeInCommentsSlot(list: HTMLElement): void {
+  const theirs = document.querySelector(THEIR_PANEL);
+  if (!theirs) {
+    if (slot === "open") {
+      slot = "none";
+      listOpen = false;
+      return render();
     }
+    const button = slot === "none" ? commentsButton() : null;
+    if (button) {
+      slot = "opening";
+      button.click();
+    }
+    // Comments are off, or labelled in another language: the page's right
+    // edge, over the up and down arrows.
+    const css =
+      slot === "opening"
+        ? "visibility: hidden;"
+        : `right: ${SIDE_GAP}px; top: 64px; width: 480px; height: calc(100vh - 80px);`;
+    if (list.style.cssText !== css) list.style.cssText = css;
+    return;
   }
+  slot = "open";
+  const box = theirs.getBoundingClientRect();
+  const css = `left: ${Math.round(box.left)}px; top: ${Math.round(box.top)}px; width: ${Math.round(box.width)}px; height: ${Math.round(box.height)}px;`;
+  if (list.style.cssText !== css) list.style.cssText = css;
+}
+
+/** Closes the comments this panel was covering. */
+function releaseCommentsSlot(): void {
+  if (slot === "none") return;
+  const close = () =>
+    document
+      .querySelector<HTMLElement>(`${THEIR_PANEL} #visibility-button button`)
+      ?.click();
+  // Closed before the comments finished opening: close them once they have.
+  if (slot === "opening") setTimeout(close, 1000);
+  slot = "none";
+  close();
 }
 
 function renderList(): void {
   const existing = document.getElementById(LIST_ID);
-  if (!enabled || !listOpen || currentVideoId() === null)
+  const shorts = onShorts();
+  if (!enabled || !listOpen || currentVideoId() === null) {
+    releaseCommentsSlot();
     return existing?.remove();
+  }
   const list = existing ?? element("section");
   list.id = LIST_ID;
   list.setAttribute("aria-label", "Claims in this video");
   list.replaceChildren(listHeader(), ...listBody());
-  const shorts = onShorts();
   list.toggleAttribute("data-shorts", shorts);
   if (shorts) {
-    // A panel beside the Short, like its comments.
+    // A panel in the Short's comments slot, over its comments.
     if (list.parentElement !== document.body) document.body.append(list);
     return followShort();
   }
@@ -1289,7 +1336,7 @@ html[dark] #vfc-list {
 .vfc-mark[data-settled="true"][data-tone="green"] { background: #2e9d57; }
 .vfc-mark[data-settled="true"][data-tone="red"] { background: #c62828; }
 /* The claims list as a panel beside a Short, like its comments. */
-#vfc-list[data-shorts] { position: fixed; z-index: 2000; box-sizing: border-box; margin: 0; overflow-y: auto; background: #fff; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2); transition: left 0.25s, top 0.25s; animation: vfc-fade 0.2s ease-out; }
+#vfc-list[data-shorts] { position: fixed; z-index: 2200; box-sizing: border-box; margin: 0; overflow-y: auto; background: #fff; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2); transition: left 0.25s, top 0.25s, width 0.25s, height 0.25s; animation: vfc-fade 0.2s ease-out; }
 html[dark] #vfc-list[data-shorts] { background: #212121; }
 @keyframes vfc-fade { from { opacity: 0; } }
 @keyframes vfc-out { to { opacity: 0; transform: translateX(-12px); } }
@@ -1429,6 +1476,21 @@ document.addEventListener(
     if (status.state === "error") return status.retry();
     if (status.state === "idle") return start();
     listOpen = !listOpen;
+    render();
+  },
+  true,
+);
+// The comments button while the claims panel covers the comments: shows the
+// comments, which are already open underneath, instead of closing them.
+document.addEventListener(
+  "click",
+  (event) => {
+    const button = commentsButton();
+    if (slot !== "open" || !button?.contains(event.target as Node)) return;
+    event.stopPropagation();
+    event.preventDefault();
+    slot = "none";
+    listOpen = false;
     render();
   },
   true,

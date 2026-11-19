@@ -90,8 +90,14 @@ videos):
   rewinding (or the Short looping) brings claims back up. Dylan tried both in
   Chrome: they work. Version 0.6.0 also changes a second click on a claim:
   it now closes the explanation, keeps the claim up, and resumes the video,
-  with an "Open in claims panel" button inside the explanation instead. Not
-  yet tried by Dylan.
+  with an "Open in claims panel" button inside the explanation instead.
+  Dylan tried it in Chrome: it works.
+- 2026-11-18: The claims panel on a Short opens in YouTube's comments slot
+  (0.8.0). It used to sit right of the Short's buttons and covered the up and
+  down arrows, and didn't fit narrow windows. Now it opens YouTube's own
+  comments panel and lies over it, so YouTube moves the Short aside and sizes
+  the slot at every window size. The comments button shows the comments
+  underneath; never both at once. Dylan tried it in Chrome: looks right.
 
 ## Next
 
@@ -285,6 +291,16 @@ reminder on 2026-10-12.
   claim text, and checking only on click. No user accounts.
 
 ## Problems
+
+- **2026-11-18 — Copying YouTube's comments layout stretched the video.**
+  Setting the attribute YouTube uses to move a Short aside worked in Claude's
+  browser pane but, on Dylan's Chrome and Arc, squeezed the Short's frame:
+  the video stretched and a second copy showed past the progress bar. Two
+  more causes stacked on top: widening the slot (Dylan wanted it as big as
+  possible) squeezed the frame too, and after reloading the extension the old
+  copy kept running in the open tab while the video was paused. Fixed by
+  opening YouTube's real comments panel and covering it, matching the
+  comments' size as Dylan asked, and by having an old copy stop itself.
 
 - **2026-11-16 — Maths came back "unverified".** The model answered
   "supported" without searching, rightly, since it's textbook mathematics;
