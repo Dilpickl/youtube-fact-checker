@@ -85,6 +85,13 @@ videos):
 - 2026-11-16: Mathematics gets a verdict. A Short quizzing a math major came
   back with five "unverified" equations (see Problems). Dylan tried the fix
   in Chrome: all supported.
+- 2026-11-18: Shorts claims behave like reading, not a modal. Pressing play
+  closes an open claim's explanation and its fade timer starts again;
+  rewinding (or the Short looping) brings claims back up. Dylan tried both in
+  Chrome: they work. Version 0.6.0 also changes a second click on a claim:
+  it now closes the explanation, keeps the claim up, and resumes the video,
+  with an "Open in claims panel" button inside the explanation instead. Not
+  yet tried by Dylan.
 
 ## Next
 
@@ -132,6 +139,10 @@ reminder on 2026-10-12.
 
 ## Decisions
 
+- **2026-11-18 — A second click on a Short's claim closes it.** Dylan found
+  it made more sense for a second click to put the explanation away and keep
+  watching than to open the panel; the panel gets its own button inside the
+  explanation. The extension's version goes up with each change Dylan tries.
 - **2026-11-16 — On a Short, claims go beside the video, briefly.** Dylan
   first chose chips on the video with a tap for detail ("nobody wants a wall
   of text on the side"), then on seeing it asked for the empty space beside

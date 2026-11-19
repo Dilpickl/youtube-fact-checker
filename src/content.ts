@@ -45,17 +45,25 @@ const LIST_ID = "vfc-list";
 const OPEN_ITEM_ID = "vfc-open";
 const CHIPS_ID = "vfc-chips";
 const SIDE_ID = "vfc-side";
+const MARKS_ID = "vfc-marks";
 // The column beside a Short: this wide at most, and over the video's foot
 // when the window leaves less than the minimum.
 const SIDE_MAX_WIDTH = 340;
 const SIDE_MIN_WIDTH = 220;
+// The claims panel beside a Short, and the room YouTube's like, comment, and
+// share buttons take up to the right of the video.
+const PANEL_MAX_WIDTH = 400;
+const PANEL_MIN_WIDTH = 300;
+const SHORTS_BUTTONS_WIDTH = 104;
 const SIDE_GAP = 16;
 // With "every Short" on, one flicked past sooner than this costs nothing.
 const SHORTS_START_SECONDS = 0.5;
 // A claim beside a Short takes this long to fade out, and the column checks
 // this often that it's still next to the video.
 const POP_FADE_MS = 400;
-const SIDE_FOLLOW_MS = 250;
+const FOLLOW_MS = 250;
+// Two clicks on the toggle closer together than this are one click.
+const TOGGLE_CLICK_GAP_MS = 400;
 const STYLE_ID = "vfc-style";
 // Checks run this far ahead of the playhead, so verdicts are ready when a
 // claim is said and nothing past where the viewer stops gets paid for.
@@ -124,8 +132,8 @@ const chipTimers = new WeakMap<HTMLElement, number>();
 const chipsByClaim = new WeakMap<LiveClaim, HTMLButtonElement>();
 /** Claims already shown beside a Short. */
 const sideSeen = new WeakSet<LiveClaim>();
-/** The timer that keeps the claims beside a Short as YouTube moves it. */
-let sideFollowing: number | undefined;
+/** The timer that keeps the pop-ups and panel beside a Short as YouTube moves it. */
+let following: number | undefined;
 
 /** The video on the page, from its address; null when it isn't a video or a Short. */
 function currentVideoId(): string | null {
@@ -385,10 +393,14 @@ function showDueChips(): void {
     if (!due || claim.chip === "final") continue;
     const settled =
       claim.check.state === "done" || claim.check.state === "failed";
+    // Still checking, and already shown as that: nothing new to show. Without
+    // this a claim popped up again on every tick until its verdict came.
+    const next = settled ? "final" : "pending";
+    if (claim.chip === next) continue;
+    claim.chip = next;
     // A Short's claims go beside the video instead of on it.
-    if (!onShorts() && (settled || claim.chip === "none")) showChip(claim);
-    claim.chip = settled ? "final" : "pending";
     if (onShorts()) popBeside(claim);
+    else showChip(claim);
     changed = true;
   }
   if (changed) renderSide();
@@ -396,6 +408,12 @@ function showDueChips(): void {
 
 /** On a Short, shows a claim beside the video for as long as its chip would last. */
 function popBeside(claim: LiveClaim): void {
+  sideSeen.delete(claim); // Slides in again with its verdict.
+  startPopTimer(claim);
+}
+
+/** Shows a claim beside a Short for its chip's time from now, then fades it. */
+function startPopTimer(claim: LiveClaim): void {
   const settled =
     claim.check.state === "done" || claim.check.state === "failed";
   const shown = !settled
@@ -404,7 +422,6 @@ function popBeside(claim: LiveClaim): void {
       ? RED_CHIP_MS
       : VERDICT_CHIP_MS;
   claim.popUntil = Date.now() + shown;
-  sideSeen.delete(claim); // Slides in again with its verdict.
   // Once to start the fade, once to take it away.
   setTimeout(renderSide, shown - POP_FADE_MS + 20);
   setTimeout(renderSide, shown + 20);
@@ -557,7 +574,7 @@ function scrollToOpen(): void {
 
 function render(): void {
   if (!enabled) {
-    for (const id of [TOGGLE_ID, PICK_ID, LIST_ID, CHIPS_ID, SIDE_ID])
+    for (const id of [TOGGLE_ID, PICK_ID, LIST_ID, CHIPS_ID, SIDE_ID, MARKS_ID])
       document.getElementById(id)?.remove();
     return;
   }
@@ -566,6 +583,7 @@ function render(): void {
   renderPickButton();
   renderList();
   renderSide();
+  renderMarks();
 }
 
 function renderPickButton(): void {
@@ -644,13 +662,6 @@ function renderToggle(): void {
     toggle = element("button");
     toggle.id = TOGGLE_ID;
     toggle.type = "button";
-    toggle.addEventListener("click", (event) => {
-      event.stopPropagation(); // Not a click on the video.
-      if (status.state === "error") return status.retry();
-      if (status.state === "idle") return start();
-      listOpen = !listOpen;
-      render();
-    });
   }
   if (toggle.parentElement !== controls) {
     if (shorts) controls.append(toggle);
@@ -669,89 +680,36 @@ function renderToggle(): void {
   toggle.setAttribute("aria-expanded", String(listOpen));
 }
 
-/** Closes the claim open beside a Short and keeps watching. */
-function closeClaim(): void {
-  openClaim = null;
-  render();
-  playerVideo()
-    ?.play()
-    .catch(() => {}); // Staying paused is fine.
-}
-
 /**
- * On a Short, claims pop up in the empty space beside the video as they're
- * said and fade after a few seconds, like the chips on a long video. The
- * toggle pulls them all up as a panel that stays; clicking a claim opens its
- * explanation and sources in place.
+ * On a Short, claims pop up in the empty space left of the video as they're
+ * said and fade after a few seconds, like the chips on a long video. Clicking
+ * one opens its explanation and sources under it, and it stays until closed.
+ * The ones that were missed are in the panel and on the progress bar.
  */
 function renderSide(): void {
   const existing = document.getElementById(SIDE_ID);
-  const removeSide = () => {
-    existing?.remove();
-    clearInterval(sideFollowing);
-    sideFollowing = undefined;
-  };
-  if (!onShorts() || status.state !== "ready" || !overlayHost())
-    return removeSide();
   const now = Date.now();
-  const shown = status.claims.filter(
-    (claim) => listOpen || claim === openClaim || now < (claim.popUntil ?? 0),
-  );
-  if (shown.length === 0) return removeSide();
+  const shown =
+    onShorts() && status.state === "ready" && overlayHost()
+      ? status.claims.filter(
+          (claim) => claim === openClaim || now < (claim.popUntil ?? 0),
+        )
+      : [];
+  if (shown.length === 0) return existing?.remove();
   const side = existing ?? element("section");
   side.id = SIDE_ID;
-  side.setAttribute("aria-label", "Claims in this Short");
-  const items = shown.map((claim) => {
-    const item = sideItem(claim);
-    const leaving =
-      !listOpen &&
-      claim !== openClaim &&
-      now > (claim.popUntil ?? 0) - POP_FADE_MS;
-    item.classList.toggle("vfc-leaving", leaving);
-    return item;
-  });
-  side.replaceChildren(...(listOpen ? [sideHeader()] : []), ...items);
+  side.setAttribute("aria-label", "Claims being said");
+  side.replaceChildren(
+    ...shown.map((claim) => {
+      const item = sideItem(claim);
+      const leaving =
+        claim !== openClaim && now > (claim.popUntil ?? 0) - POP_FADE_MS;
+      item.classList.toggle("vfc-leaving", leaving);
+      return item;
+    }),
+  );
   if (!side.isConnected) document.body.append(side);
-  placeSide();
-  // YouTube slides the Short aside for comments and resizes it with the
-  // window, so keep following it for as long as anything is shown.
-  sideFollowing ??= window.setInterval(placeSide, SIDE_FOLLOW_MS);
-}
-
-/** Puts the claims left of the Short; over its foot when there's no room there. */
-function placeSide(): void {
-  const side = document.getElementById(SIDE_ID);
-  const host = overlayHost();
-  if (!side || !host) return;
-  const frame = host.getBoundingClientRect();
-  const pageLeft =
-    document.querySelector("ytd-shorts")?.getBoundingClientRect().left ?? 0;
-  const room = frame.left - pageLeft - 2 * SIDE_GAP;
-  const beside = room >= SIDE_MIN_WIDTH;
-  const width = Math.min(SIDE_MAX_WIDTH, room);
-  const place = beside
-    ? `left: ${Math.round(frame.left - SIDE_GAP - width)}px; top: ${Math.round(frame.top)}px; width: ${Math.round(width)}px; max-height: ${Math.round(frame.height)}px;`
-    : "";
-  // Only when it moved, so a still Short costs nothing.
-  if (side.style.cssText !== place) side.style.cssText = place;
-  side.dataset.beside = String(beside);
-  const parent = beside ? document.body : host;
-  if (side.parentElement !== parent) parent.append(side);
-}
-
-function sideHeader(): HTMLElement {
-  const close = element("button", "×", "vfc-side-close");
-  close.type = "button";
-  close.title = "Close";
-  close.setAttribute("aria-label", "Close");
-  close.addEventListener("click", () => {
-    listOpen = false;
-    if (openClaim) return closeClaim();
-    render();
-  });
-  const header = element("header");
-  header.append(element("strong", "Claims in this Short"), close);
-  return header;
+  followShort();
 }
 
 function sideItem(claim: LiveClaim): HTMLElement {
@@ -775,24 +733,171 @@ function sideItem(claim: LiveClaim): HTMLElement {
     element("span", claim.claim),
   );
   head.addEventListener("click", () => {
-    if (open) return closeClaim();
+    if (open) return closeClaim(claim);
     openClaim = claim;
     playerVideo()?.pause();
     render();
   });
   item.append(head);
-  if (open) item.append(details(claim, true));
+  if (!open) return item;
+  const toPanel = element("button", "Open in claims panel ›", "vfc-action");
+  toPanel.type = "button";
+  toPanel.addEventListener("click", () => {
+    listOpen = true;
+    render();
+    scrollToOpen();
+  });
+  item.append(details(claim, true), toPanel);
   return item;
+}
+
+/**
+ * Closes the explanation open beside a Short and keeps watching; the claim
+ * stays a moment, then fades like the others.
+ */
+function closeClaim(claim: LiveClaim): void {
+  openClaim = null;
+  startPopTimer(claim);
+  render();
+  playerVideo()
+    ?.play()
+    .catch(() => {}); // Staying paused is fine.
+}
+
+/**
+ * A dot on the progress bar where each claim is said, coloured by verdict.
+ * Clicking one goes back to that moment and opens the claim in the panel.
+ */
+function renderMarks(): void {
+  const existing = document.getElementById(MARKS_ID);
+  const video = playerVideo();
+  const bar = document.querySelector(
+    onShorts()
+      ? "yt-progress-bar.ytPlayerProgressBarHost"
+      : "#movie_player .ytp-progress-bar",
+  );
+  // During an ad the bar and the video's length are the ad's.
+  if (
+    !enabled ||
+    status.state !== "ready" ||
+    !video ||
+    !bar ||
+    adShowing() ||
+    !(video.duration > 0)
+  )
+    return existing?.remove();
+  const { duration } = video;
+  const marks = existing ?? element("div");
+  marks.id = MARKS_ID;
+  marks.replaceChildren(
+    ...status.claims
+      .filter((claim) => claim.seconds <= duration)
+      .map((claim) => {
+        const { label, tone } = verdictLook(claim);
+        const mark = element("button", undefined, "vfc-mark");
+        mark.type = "button";
+        mark.dataset.tone = tone;
+        mark.dataset.settled = String(
+          claim.check.state === "done" || claim.check.state === "failed",
+        );
+        mark.style.left = `${((100 * claim.seconds) / duration).toFixed(2)}%`;
+        mark.title = `${label}: ${claim.claim}`;
+        mark.setAttribute("aria-label", mark.title);
+        // YouTube's bar seeks on a press; a press on a mark isn't one on the bar.
+        for (const press of ["pointerdown", "mousedown", "touchstart"])
+          mark.addEventListener(press, (event) => event.stopPropagation());
+        mark.addEventListener("click", (event) => {
+          event.stopPropagation();
+          jumpTo(claim.seconds);
+          listOpen = true;
+          openClaim = claim;
+          render();
+          scrollToOpen();
+        });
+        return mark;
+      }),
+  );
+  if (marks.parentElement !== bar) bar.append(marks);
+}
+
+/**
+ * Keeps the pop-ups and the panel beside a Short. YouTube slides the Short
+ * aside for comments and resizes it with the window, so this runs on a timer
+ * for as long as either is shown.
+ */
+function followShort(): void {
+  const side = document.getElementById(SIDE_ID);
+  const list = document.getElementById(LIST_ID);
+  const host = overlayHost();
+  if (!onShorts() || !host || (!side && !list)) {
+    clearInterval(following);
+    following = undefined;
+    return;
+  }
+  following ??= window.setInterval(followShort, FOLLOW_MS);
+  const frame = host.getBoundingClientRect();
+  const top = Math.round(frame.top);
+  const height = Math.round(frame.height);
+  const pageLeft =
+    document.querySelector("ytd-shorts")?.getBoundingClientRect().left ?? 0;
+  const leftRoom = frame.left - pageLeft - 2 * SIDE_GAP;
+  const place = (target: HTMLElement, left: number, width: number) => {
+    const css = `left: ${Math.round(left)}px; top: ${top}px; width: ${Math.round(width)}px; max-height: ${height}px;`;
+    // Only when it moved, so a still Short costs nothing.
+    if (target.style.cssText !== css) target.style.cssText = css;
+  };
+  if (side) {
+    // Pop-ups: left of the video; over its foot when there's no room there.
+    const beside = leftRoom >= SIDE_MIN_WIDTH;
+    const width = Math.min(SIDE_MAX_WIDTH, leftRoom);
+    if (beside) place(side, frame.left - SIDE_GAP - width, width);
+    else if (side.style.cssText) side.style.cssText = "";
+    side.dataset.beside = String(beside);
+    const parent = beside ? document.body : host;
+    if (side.parentElement !== parent) parent.append(side);
+  }
+  if (list) {
+    // The panel: right of the Short's buttons, where comments open. When
+    // comments (or another YouTube panel) are there, or the window is too
+    // narrow, it takes the left side instead.
+    const theirs = document.querySelector(
+      'ytd-shorts ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]',
+    );
+    const rightLeft = frame.right + SHORTS_BUTTONS_WIDTH;
+    const rightRoom = window.innerWidth - rightLeft - SIDE_GAP;
+    if (!theirs && rightRoom >= PANEL_MIN_WIDTH)
+      place(list, rightLeft, Math.min(PANEL_MAX_WIDTH, rightRoom));
+    else if (leftRoom >= PANEL_MIN_WIDTH) {
+      const width = Math.min(PANEL_MAX_WIDTH, leftRoom);
+      place(list, frame.left - SIDE_GAP - width, width);
+    } else {
+      // ponytail: no room on either side, so it covers the page's right
+      // edge; dock it under the Short if narrow windows matter.
+      place(
+        list,
+        window.innerWidth - SIDE_GAP - PANEL_MIN_WIDTH,
+        PANEL_MIN_WIDTH,
+      );
+    }
+  }
 }
 
 function renderList(): void {
   const existing = document.getElementById(LIST_ID);
-  if (!enabled || !listOpen || onShorts() || currentVideoId() === null)
+  if (!enabled || !listOpen || currentVideoId() === null)
     return existing?.remove();
   const list = existing ?? element("section");
   list.id = LIST_ID;
   list.setAttribute("aria-label", "Claims in this video");
   list.replaceChildren(listHeader(), ...listBody());
+  const shorts = onShorts();
+  list.toggleAttribute("data-shorts", shorts);
+  if (shorts) {
+    // A panel beside the Short, like its comments.
+    if (list.parentElement !== document.body) document.body.append(list);
+    return followShort();
+  }
+  list.style.cssText = "";
   // Beside the video in YouTube's two-column layout, under it in one column.
   const oneColumn = document
     .querySelector("ytd-watch-flexy")
@@ -858,7 +963,9 @@ function listBody(): HTMLElement[] {
       return [
         ...picked,
         note(
-          `Each claim is checked against web sources a few minutes before it's said. Click one for its sources. Heard something else? Press ${PICK_KEY.toUpperCase()} or "Check this".`,
+          onShorts()
+            ? "Each claim is checked against web sources. Click one for its sources."
+            : `Each claim is checked against web sources a few minutes before it's said. Click one for its sources. Heard something else? Press ${PICK_KEY.toUpperCase()} or "Check this".`,
         ),
         items,
       ];
@@ -1003,7 +1110,8 @@ const STYLE = `
   white-space: nowrap;
   cursor: pointer;
 }
-#vfc-toggle:hover, #vfc-toggle[aria-expanded="true"] { background: rgba(255, 255, 255, 0.3); }
+#vfc-toggle:hover, #vfc-toggle[data-hover], #vfc-toggle[aria-expanded="true"] { background: rgba(255, 255, 255, 0.3); }
+html.vfc-over-toggle * { cursor: pointer !important; }
 #vfc-toggle[data-state="error"] { background: rgba(255, 78, 69, 0.45); }
 #vfc-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 #vfc-pick {
@@ -1130,6 +1238,8 @@ html[dark] #vfc-list {
 
 /* On a Short: sized and coloured like its own pause and volume buttons. */
 #vfc-toggle[data-shorts="true"] {
+  position: relative;
+  z-index: 10;
   height: 40px;
   margin: 0;
   padding: 0 16px;
@@ -1137,7 +1247,7 @@ html[dark] #vfc-list {
   background: rgba(0, 0, 0, 0.3);
   font: 500 14px/40px Roboto, Arial, sans-serif;
 }
-#vfc-toggle[data-shorts="true"]:hover, #vfc-toggle[data-shorts="true"][aria-expanded="true"] { background: rgba(0, 0, 0, 0.55); }
+#vfc-toggle[data-shorts="true"]:hover, #vfc-toggle[data-shorts="true"][data-hover], #vfc-toggle[data-shorts="true"][aria-expanded="true"] { background: rgba(0, 0, 0, 0.55); }
 #vfc-toggle[data-shorts="true"][data-state="error"] { background: rgba(198, 40, 40, 0.75); }
 #vfc-side {
   position: fixed;
@@ -1151,9 +1261,6 @@ html[dark] #vfc-list {
   transition: left 0.25s, top 0.25s;
 }
 #vfc-side[data-beside="false"] { position: absolute; z-index: 62; left: 12px; right: 12px; bottom: 12px; max-height: 62%; }
-#vfc-side header { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 2px 14px; border-radius: 12px; background: rgba(28, 28, 28, 0.72); backdrop-filter: blur(10px); color: #f1f1f1; }
-.vfc-side-close { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; font: 400 20px/32px Roboto, Arial, sans-serif; cursor: pointer; }
-.vfc-side-close:hover { background: rgba(255, 255, 255, 0.15); }
 /* Dark glass with the verdict as a coloured edge and label, not a solid block. */
 .vfc-side-item { flex: none; overflow: hidden; border-left: 3px solid #78909c; border-radius: 12px; background: rgba(28, 28, 28, 0.72); backdrop-filter: blur(10px); color: #f1f1f1; }
 .vfc-side-item.vfc-new { animation: vfc-in 0.3s cubic-bezier(0.05, 0, 0, 1); }
@@ -1165,13 +1272,26 @@ html[dark] #vfc-list {
 .vfc-side-item[data-settled="true"][data-tone="green"] .vfc-side-head strong { color: #5fdc8a; }
 .vfc-side-item[data-settled="true"][data-tone="red"] .vfc-side-head strong { color: #ff7b72; }
 .vfc-side-head:hover { background: rgba(255, 255, 255, 0.08); }
-.vfc-side-head:focus-visible, .vfc-side-close:focus-visible, .vfc-side-item .vfc-action:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.vfc-side-head:focus-visible, .vfc-side-item .vfc-action:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
 .vfc-side-item .vfc-details { padding: 10px 14px 12px 12px; border-top: 1px solid rgba(255, 255, 255, 0.12); color: #ddd; font-size: 13px; line-height: 18px; }
 .vfc-side-item .vfc-explanation, .vfc-side-item .vfc-note { margin: 0 0 8px; }
 .vfc-side-item .vfc-explanation:last-child { margin: 0; }
 .vfc-side-item .vfc-sources { margin: 0; padding: 0; list-style: none; color: #aaa; font-size: 12px; }
 .vfc-side-item .vfc-sources a { color: #3ea6ff; }
 .vfc-side-item .vfc-action { height: 32px; padding: 0 14px; border: 0; border-radius: 16px; background: rgba(255, 255, 255, 0.15); color: #fff; font: 500 13px/32px Roboto, Arial, sans-serif; cursor: pointer; }
+.vfc-side-item > .vfc-action { margin: 0 14px 12px 12px; }
+.vfc-side-item .vfc-action:hover { background: rgba(255, 255, 255, 0.25); }
+/* Dots on the progress bar where claims are said. Above YouTube's own layers
+   (its scrubber is 43), and ringed in white so red shows on the red bar. */
+#vfc-marks { position: absolute; inset: 0; z-index: 44; pointer-events: none; }
+.vfc-mark { position: absolute; top: 50%; box-sizing: border-box; width: 11px; height: 11px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #78909c; box-shadow: 0 0 3px rgba(0, 0, 0, 0.7); transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer; transition: transform 0.1s; }
+.vfc-mark:hover, .vfc-mark:focus-visible { transform: translate(-50%, -50%) scale(1.5); outline: none; }
+.vfc-mark[data-settled="true"][data-tone="green"] { background: #2e9d57; }
+.vfc-mark[data-settled="true"][data-tone="red"] { background: #c62828; }
+/* The claims list as a panel beside a Short, like its comments. */
+#vfc-list[data-shorts] { position: fixed; z-index: 2000; box-sizing: border-box; margin: 0; overflow-y: auto; background: #fff; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2); transition: left 0.25s, top 0.25s; animation: vfc-fade 0.2s ease-out; }
+html[dark] #vfc-list[data-shorts] { background: #212121; }
+@keyframes vfc-fade { from { opacity: 0; } }
 @keyframes vfc-out { to { opacity: 0; transform: translateX(-12px); } }
 `;
 
@@ -1183,6 +1303,13 @@ document.addEventListener(
     if (event.target !== playerVideo() || extensionGone()) return;
     // YouTube builds a Short's controls after the video starts.
     if (enabled && !document.getElementById(TOGGLE_ID)) render();
+    // The video's length isn't known until it loads, and an ad hides the bar.
+    if (
+      status.state === "ready" &&
+      status.claims.length > 0 &&
+      !document.getElementById(MARKS_ID)
+    )
+      renderMarks();
     if (
       allShorts &&
       onShorts() &&
@@ -1198,13 +1325,24 @@ document.addEventListener(
   "seeked",
   (event) => {
     if (event.target !== playerVideo() || status.state !== "ready") return;
-    // Going back shows the chips again for the claims ahead. Not on a Short,
-    // which starts over by itself: the claims beside it stay.
+    // Going back, or a Short starting over, shows the claims ahead again.
     const now = (event.target as HTMLVideoElement).currentTime;
-    if (!onShorts())
-      for (const claim of status.claims)
-        if (claim.seconds > now) claim.chip = "none";
+    for (const claim of status.claims)
+      if (claim.seconds > now) claim.chip = "none";
     checkAhead();
+  },
+  true,
+);
+document.addEventListener(
+  "play",
+  (event) => {
+    if (event.target !== playerVideo() || !onShorts() || !openClaim) return;
+    // Playing again means the viewer is done reading: the open claim closes
+    // and fades like the others.
+    const claim = openClaim;
+    openClaim = null;
+    startPopTimer(claim);
+    render();
   },
   true,
 );
@@ -1226,6 +1364,72 @@ document.addEventListener(
       return;
     event.preventDefault();
     void checkWhatWasJustSaid();
+  },
+  true,
+);
+// Clicks on the toggle are caught here, on the page, not on the button itself.
+// On a Short the button opened nothing, and neither a listener on the button
+// nor one matching the clicked element fixed it, so the click is matched by
+// position. A click that arrives twice counts once.
+let lastToggleClick = -Infinity;
+
+/**
+ * Whether a click or press landed on the toggle, judged by where it landed
+ * and not by which element received it: on a Short, YouTube's volume slider
+ * can lie invisibly over the button and take its clicks.
+ */
+function onToggle(event: MouseEvent): boolean {
+  const toggle = document.getElementById(TOGGLE_ID);
+  if (!toggle || toggle.hidden) return false;
+  const box = toggle.getBoundingClientRect();
+  return (
+    box.width > 0 &&
+    event.clientX >= box.left &&
+    event.clientX <= box.right &&
+    event.clientY >= box.top &&
+    event.clientY <= box.bottom
+  );
+}
+
+// For the same reason :hover never reaches the button, so hover is judged by
+// position too, with the pointer cursor shown over whatever covers it.
+document.addEventListener(
+  "pointermove",
+  (event) => {
+    const over = onToggle(event);
+    document.getElementById(TOGGLE_ID)?.toggleAttribute("data-hover", over);
+    document.documentElement.classList.toggle("vfc-over-toggle", over);
+  },
+  { capture: true, passive: true },
+);
+
+// A press on the toggle isn't the start of a drag on whatever lies over it.
+for (const press of [
+  "pointerdown",
+  "mousedown",
+  "pointerup",
+  "mouseup",
+] as const)
+  document.addEventListener(
+    press,
+    (event) => {
+      if (onToggle(event)) event.stopPropagation();
+    },
+    true,
+  );
+document.addEventListener(
+  "click",
+  (event) => {
+    if (!onToggle(event)) return;
+    event.stopPropagation(); // Not a click on the video.
+    event.preventDefault();
+    if (event.timeStamp - lastToggleClick < TOGGLE_CLICK_GAP_MS) return;
+    lastToggleClick = event.timeStamp;
+    if (extensionGone()) return;
+    if (status.state === "error") return status.retry();
+    if (status.state === "idle") return start();
+    listOpen = !listOpen;
+    render();
   },
   true,
 );
